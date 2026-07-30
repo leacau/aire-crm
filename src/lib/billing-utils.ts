@@ -1,5 +1,6 @@
 import { differenceInCalendarDays, parse, parseISO } from 'date-fns';
-import type { PaymentEntry } from './types';
+import { sanitizeInvoiceNumber } from './invoice-utils';
+import type { Invoice, Opportunity, PaymentEntry } from './types';
 
 const PAYMENT_DATE_FORMATS = [
   { format: 'yyyy-MM-dd', pattern: /^\d{4}-\d{1,2}-\d{1,2}$/ },
@@ -124,4 +125,121 @@ export const parsePastedPayments = (
         nextContactAt: null,
       };
     });
+};
+
+export type DuplicateInvoiceGroup = {
+  key: string;
+  label: string;
+  invoices: Invoice[];
+  hasCreditNote: boolean;
+  type: 'exact' | 'number';
+};
+
+export const getDuplicateInvoiceGroups = ({
+  invoices,
+  opportunitiesMap,
+  isCreditNoteRelated,
+}: {
+  invoices: Invoice[];
+  opportunitiesMap: Record<string, Opportunity>;
+  isCreditNoteRelated: (invoice: Invoice) => boolean;
+}) => {
+  const invoiceData = invoices.map((inv) => {
+    const raw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
+    const sig = raw.replace(/^0+/, '');
+    return {
+      inv,
+      id: inv.id,
+      sig,
+    };
+  });
+
+  const parent: Record<string, string> = {};
+  invoiceData.forEach((d) => {
+    parent[d.id] = d.id;
+  });
+
+  const find = (id: string): string => {
+    if (parent[id] === id) return id;
+    parent[id] = find(parent[id]);
+    return parent[id];
+  };
+
+  const union = (left: string, right: string) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft !== rootRight) parent[rootLeft] = rootRight;
+  };
+
+  const bySig: Record<string, string[]> = {};
+  invoiceData.forEach((d) => {
+    if (!d.sig) return;
+    if (!bySig[d.sig]) bySig[d.sig] = [];
+    bySig[d.sig].push(d.id);
+  });
+
+  Object.values(bySig).forEach((ids) => {
+    for (let index = 1; index < ids.length; index += 1) {
+      union(ids[0], ids[index]);
+    }
+  });
+
+  const uniqueSigs = Object.keys(bySig);
+  const shortSigs = uniqueSigs.filter((sig) => sig.length >= 4 && sig.length <= 6);
+
+  for (const short of shortSigs) {
+    for (const other of uniqueSigs) {
+      if (short === other) continue;
+      if (other.length > short.length && other.endsWith(short)) {
+        const shortIds = bySig[short];
+        const otherIds = bySig[other];
+        if (shortIds?.length && otherIds?.length) {
+          union(shortIds[0], otherIds[0]);
+        }
+      }
+    }
+  }
+
+  const groupsMap: Record<string, Invoice[]> = {};
+  invoiceData.forEach((d) => {
+    const root = find(d.id);
+    if (!groupsMap[root]) groupsMap[root] = [];
+    groupsMap[root].push(d.inv);
+  });
+
+  const exactDuplicateGroups: DuplicateInvoiceGroup[] = [];
+  const numberDuplicateGroups: DuplicateInvoiceGroup[] = [];
+
+  Object.values(groupsMap).forEach((groupInvoices) => {
+    if (groupInvoices.length < 2) return;
+
+    const getIdentity = (inv: Invoice) => {
+      const opp = opportunitiesMap[inv.opportunityId];
+      const clientId = opp?.clientId || 'unknown';
+      const date = normalizeDateKey(inv.date) || 'nodate';
+      const amount = Math.abs(inv.amount).toFixed(2);
+      return `${clientId}|${date}|${amount}`;
+    };
+
+    const firstIdentity = getIdentity(groupInvoices[0]);
+    const allIdentical = groupInvoices.every((inv) => getIdentity(inv) === firstIdentity);
+
+    groupInvoices.sort((a, b) => (b.invoiceNumber || '').length - (a.invoiceNumber || '').length);
+
+    const groupObj: DuplicateInvoiceGroup = {
+      key: groupInvoices[0].id,
+      label: `Factura ${groupInvoices[0].invoiceNumber}`,
+      invoices: groupInvoices,
+      hasCreditNote: groupInvoices.some(isCreditNoteRelated),
+      type: allIdentical ? 'exact' : 'number',
+    };
+
+    if (allIdentical) exactDuplicateGroups.push(groupObj);
+    else numberDuplicateGroups.push(groupObj);
+  });
+
+  exactDuplicateGroups.sort((a, b) => a.label.localeCompare(b.label));
+  numberDuplicateGroups.sort((a, b) => a.label.localeCompare(b.label));
+
+  return { exactDuplicateGroups, numberDuplicateGroups };
 };
