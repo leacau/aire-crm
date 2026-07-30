@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTable } from '@/components/billing/billing-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
-import { PaymentsSummary, type PaymentSummaryRow } from '@/components/billing/payments-summary';
+import { PaymentsSummary } from '@/components/billing/payments-summary';
 import { EventSummary } from '@/components/billing/event-summary';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -34,9 +34,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   billingItemMatchesSearch,
-  computeDaysLate,
   getDuplicateInvoiceGroups,
   getBillingVisibleLists,
+  getPaymentSummaryRows,
   getVisiblePayments,
   normalizeDateForComparison,
   parsePastedPayments,
@@ -357,58 +357,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   const filteredCreditNoteInvoices = useMemo(() => creditNoteInvoices.filter(filterItem), [creditNoteInvoices, filterItem]);
   const filteredPaymentsWithSearch = useMemo(() => filteredPayments.filter(filterItem), [filteredPayments, filterItem]);
 
-  const paymentsSummary = useMemo<PaymentSummaryRow[]>(() => {
-    const buckets: Record<string, PaymentSummaryRow> = {};
-
-    const getBucket = (daysLate: number) => {
-      if (daysLate > 90) return '90+' as const;
-      if (daysLate > 60) return '61-90' as const;
-      if (daysLate > 30) return '31-60' as const;
-      return '1-30' as const;
-    };
-
-    filteredPaymentsWithSearch.forEach((entry) => {
-      const daysLate = entry.daysLate ?? computeDaysLate(entry.dueDate || undefined);
-      if (daysLate == null || daysLate <= 0) return;
-      if (entry.status === 'Pagado') return;
-
-      const amount =
-        typeof entry.pendingAmount === 'number'
-          ? entry.pendingAmount
-          : typeof entry.amount === 'number'
-            ? entry.amount
-            : 0;
-
-      if (!amount || Number.isNaN(amount)) return;
-
-      const bucketKey = getBucket(daysLate);
-      
-      let advisorId = entry.advisorId;
-      let advisorName = entry.advisorName || 'Sin asesor';
-
-      // AQUÍ AGRUPAMOS "Mario Altamirano" bajo Corporativo en el resumen
-      if (!advisorId || advisorName.toUpperCase() === 'CORPORATIVO' || advisorName === 'Mario Altamirano') {
-          advisorId = 'corporativo';
-          advisorName = 'Corporativo';
-      } else if (!advisorId) {
-          advisorId = 'sin-asesor';
-      }
-
-      if (!buckets[advisorId]) {
-        buckets[advisorId] = {
-          advisorId,
-          advisorName: advisorName,
-          ranges: { '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 },
-          total: 0,
-        };
-      }
-
-      buckets[advisorId].ranges[bucketKey] += amount;
-      buckets[advisorId].total += amount;
-    });
-
-    return Object.values(buckets).sort((a, b) => a.advisorName.localeCompare(b.advisorName, 'es'));
-  }, [filteredPaymentsWithSearch]);
+  const paymentsSummary = useMemo(() => getPaymentSummaryRows(filteredPaymentsWithSearch), [filteredPaymentsWithSearch]);
 
   useEffect(() => {
     setSelectedPaymentIds((prev) => prev.filter((id) => filteredPaymentsWithSearch.some((entry) => entry.id === id)));

@@ -483,3 +483,66 @@ export const billingItemMatchesSearch = ({
 
   return false;
 };
+
+export type BillingPaymentSummaryRow = {
+  advisorId: string;
+  advisorName: string;
+  ranges: {
+    '1-30': number;
+    '31-60': number;
+    '61-90': number;
+    '90+': number;
+  };
+  total: number;
+};
+
+const getPaymentLateBucket = (daysLate: number): keyof BillingPaymentSummaryRow['ranges'] => {
+  if (daysLate > 90) return '90+';
+  if (daysLate > 60) return '61-90';
+  if (daysLate > 30) return '31-60';
+  return '1-30';
+};
+
+export const getPaymentSummaryRows = (payments: PaymentEntry[]): BillingPaymentSummaryRow[] => {
+  const buckets: Record<string, BillingPaymentSummaryRow> = {};
+
+  payments.forEach((entry) => {
+    const daysLate = entry.daysLate ?? computeDaysLate(entry.dueDate || undefined);
+    if (daysLate == null || daysLate <= 0) return;
+    if (entry.status === 'Pagado') return;
+
+    const amount =
+      typeof entry.pendingAmount === 'number'
+        ? entry.pendingAmount
+        : typeof entry.amount === 'number'
+          ? entry.amount
+          : 0;
+
+    if (!amount || Number.isNaN(amount)) return;
+
+    const bucketKey = getPaymentLateBucket(daysLate);
+    let advisorId = entry.advisorId;
+    let advisorName = entry.advisorName || 'Sin asesor';
+
+    if (!advisorId || advisorName.toUpperCase() === 'CORPORATIVO' || advisorName === 'Mario Altamirano') {
+      advisorId = 'corporativo';
+      advisorName = 'Corporativo';
+    } else if (!advisorId) {
+      advisorId = 'sin-asesor';
+    }
+
+    if (!buckets[advisorId]) {
+      buckets[advisorId] = {
+        advisorId,
+        advisorName,
+        ranges: { '1-30': 0, '31-60': 0, '61-90': 0, '90+': 0 },
+        total: 0,
+      };
+    }
+
+    buckets[advisorId].ranges[bucketKey] += amount;
+    buckets[advisorId].total += amount;
+  });
+
+  return Object.values(buckets).sort((left, right) => left.advisorName.localeCompare(right.advisorName, 'es'));
+};

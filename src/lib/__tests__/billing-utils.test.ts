@@ -5,6 +5,7 @@ import {
   getBillingVisibleLists,
   getDuplicateInvoiceGroups,
   getPeriodDurationInMonths,
+  getPaymentSummaryRows,
   getVisiblePayments,
   isOfficialSellerName,
   normalizeDateForComparison,
@@ -231,6 +232,49 @@ describe('billing-utils', () => {
       clientsMap,
       opportunitiesMap,
     })).toBe(false);
+  });
+
+  it('summarizes pending payments by advisor and late-day ranges', () => {
+    const result = getPaymentSummaryRows([
+      payment({ id: 'p-1', advisorId: 'advisor-1', advisorName: 'Asesor A', daysLate: 15, pendingAmount: 100 }),
+      payment({ id: 'p-2', advisorId: 'advisor-1', advisorName: 'Asesor A', daysLate: 45, amount: 200, pendingAmount: undefined }),
+      payment({ id: 'p-3', advisorId: 'advisor-2', advisorName: 'Asesor B', daysLate: 75, pendingAmount: 300 }),
+      payment({ id: 'p-4', advisorId: 'advisor-2', advisorName: 'Asesor B', daysLate: 100, pendingAmount: 400 }),
+      payment({ id: 'paid', advisorId: 'advisor-1', advisorName: 'Asesor A', daysLate: 15, pendingAmount: 999, status: 'Pagado' }),
+      payment({ id: 'not-late', advisorId: 'advisor-1', advisorName: 'Asesor A', daysLate: 0, pendingAmount: 999 }),
+    ]);
+
+    expect(result).toEqual([
+      {
+        advisorId: 'advisor-1',
+        advisorName: 'Asesor A',
+        ranges: { '1-30': 100, '31-60': 200, '61-90': 0, '90+': 0 },
+        total: 300,
+      },
+      {
+        advisorId: 'advisor-2',
+        advisorName: 'Asesor B',
+        ranges: { '1-30': 0, '31-60': 0, '61-90': 300, '90+': 400 },
+        total: 700,
+      },
+    ]);
+  });
+
+  it('groups corporate or unassigned payments under Corporativo', () => {
+    const result = getPaymentSummaryRows([
+      payment({ id: 'corp-name', advisorId: 'corp-id', advisorName: 'CORPORATIVO', daysLate: 20, pendingAmount: 100 }),
+      payment({ id: 'mario', advisorId: 'mario-id', advisorName: 'Mario Altamirano', daysLate: 20, pendingAmount: 200 }),
+      payment({ id: 'empty-id', advisorId: '', advisorName: 'Sin asignar', daysLate: 20, pendingAmount: 300 }),
+    ]);
+
+    expect(result).toEqual([
+      {
+        advisorId: 'corporativo',
+        advisorName: 'Corporativo',
+        ranges: { '1-30': 600, '31-60': 0, '61-90': 0, '90+': 0 },
+        total: 600,
+      },
+    ]);
   });
 });
 
