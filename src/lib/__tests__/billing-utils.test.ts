@@ -1,15 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  billingItemMatchesSearch,
   computeDaysLate,
+  getBillingVisibleLists,
   getDuplicateInvoiceGroups,
   getPeriodDurationInMonths,
+  getVisiblePayments,
   isOfficialSellerName,
   normalizeDateForComparison,
   normalizeDateKey,
   parseFlexibleDate,
   parsePastedPayments,
 } from '../billing-utils';
-import type { Invoice, Opportunity } from '../types';
+import type { Client, Invoice, Opportunity, PaymentEntry, User } from '../types';
 
 describe('billing-utils', () => {
   beforeEach(() => {
@@ -124,6 +127,111 @@ describe('billing-utils', () => {
 
     expect(result.exactDuplicateGroups[0].hasCreditNote).toBe(true);
   });
+
+  it('derives visible billing lists by advisor, date range and invoice status', () => {
+    const result = getBillingVisibleLists({
+      opportunities: [
+        opportunity({ id: 'opp-monthly', clientId: 'client-1', createdAt: '2026-07-05', periodicidad: ['Mensual'] }),
+        opportunity({ id: 'opp-once', clientId: 'client-2', createdAt: '2026-07-10', periodicidad: ['Ocasional'] }),
+        opportunity({ id: 'opp-other', clientId: 'client-3', createdAt: '2026-07-10', periodicidad: ['Ocasional'] }),
+      ],
+      invoices: [
+        invoice({ id: 'inv-collect', opportunityId: 'opp-monthly', date: '2026-07-08', status: 'Pendiente' }),
+        invoice({ id: 'inv-paid', opportunityId: 'opp-monthly', datePaid: '2026-07-12', status: 'Pagada' }),
+        invoice({ id: 'inv-credit', opportunityId: 'opp-monthly', isCreditNote: true, creditNoteMarkedAt: '2026-07-15' }),
+      ],
+      clients: [
+        client({ id: 'client-1', ownerId: 'advisor-1' }),
+        client({ id: 'client-2', ownerId: 'advisor-1' }),
+        client({ id: 'client-3', ownerId: 'advisor-2' }),
+      ],
+      selectedAdvisor: 'all',
+      isBoss: false,
+      user: user({ id: 'advisor-1' }),
+      dateRange: { from: new Date(2026, 6, 1), to: new Date(2026, 6, 31) },
+      markedOnly: false,
+      isDeletionMarked: () => false,
+      prefsReady: true,
+    });
+
+    expect(result.toInvoiceOpps.map((item) => item.id)).toEqual(['opp-once']);
+    expect(result.toCollectInvoices.map((item) => item.id)).toEqual(['inv-collect']);
+    expect(result.paidInvoices.map((item) => item.id)).toEqual(['inv-paid']);
+    expect(result.creditNoteInvoices.map((item) => item.id)).toEqual(['inv-credit']);
+  });
+
+  it('filters billing lists by selected advisor for management users', () => {
+    const result = getBillingVisibleLists({
+      opportunities: [
+        opportunity({ id: 'opp-1', clientId: 'client-1', createdAt: '2026-07-10' }),
+        opportunity({ id: 'opp-2', clientId: 'client-2', createdAt: '2026-07-10' }),
+      ],
+      invoices: [
+        invoice({ id: 'inv-1', opportunityId: 'opp-1', date: '2026-07-11' }),
+        invoice({ id: 'inv-2', opportunityId: 'opp-2', date: '2026-07-11' }),
+      ],
+      clients: [
+        client({ id: 'client-1', ownerId: 'advisor-1' }),
+        client({ id: 'client-2', ownerId: 'advisor-2' }),
+      ],
+      selectedAdvisor: 'advisor-2',
+      isBoss: true,
+      user: user({ id: 'manager-1' }),
+      dateRange: { from: new Date(2026, 6, 1), to: new Date(2026, 6, 31) },
+      markedOnly: false,
+      isDeletionMarked: () => false,
+      prefsReady: true,
+    });
+
+    expect(result.toCollectInvoices.map((item) => item.id)).toEqual(['inv-2']);
+  });
+
+  it('filters and sorts visible payment entries by role and due date', () => {
+    const result = getVisiblePayments({
+      payments: [
+        payment({ id: 'late-2', advisorId: 'advisor-1', dueDate: '2026-07-10' }),
+        payment({ id: 'official', advisorId: 'advisor-1', advisorName: 'Vendedor Oficial', dueDate: '2026-07-01' }),
+        payment({ id: 'late-1', advisorId: 'advisor-1', dueDate: '2026-07-05' }),
+        payment({ id: 'other', advisorId: 'advisor-2', dueDate: '2026-07-03' }),
+      ],
+      isBoss: false,
+      selectedAdvisor: 'all',
+      user: user({ id: 'advisor-1' }),
+    });
+
+    expect(result.map((item) => item.id)).toEqual(['late-1', 'late-2']);
+    expect(result[0].daysLate).toBe(25);
+  });
+
+  it('matches billing search terms against payments, invoices and client data', () => {
+    const clientsMap = {
+      'client-1': client({ id: 'client-1', denominacion: 'Cliente Norte', razonSocial: 'Norte SA' }),
+    };
+    const opportunitiesMap = {
+      'opp-1': opportunity({ id: 'opp-1', clientId: 'client-1' }),
+    };
+
+    expect(billingItemMatchesSearch({
+      item: payment({ company: 'Aire SRL', comprobanteNumber: 'FAC-123' }),
+      searchTerm: 'fac-123',
+      clientsMap,
+      opportunitiesMap,
+    })).toBe(true);
+
+    expect(billingItemMatchesSearch({
+      item: invoice({ invoiceNumber: '0000777', opportunityId: 'opp-1' }),
+      searchTerm: 'norte',
+      clientsMap,
+      opportunitiesMap,
+    })).toBe(true);
+
+    expect(billingItemMatchesSearch({
+      item: opportunity({ id: 'opp-1', clientId: 'client-1' }),
+      searchTerm: 'sur',
+      clientsMap,
+      opportunitiesMap,
+    })).toBe(false);
+  });
 });
 
 const invoice = (overrides: Partial<Invoice>): Invoice => ({
@@ -144,3 +252,36 @@ const opportunity = (overrides: Partial<Opportunity>): Opportunity => ({
   value: 1000,
   ...overrides,
 } as Opportunity);
+
+const client = (overrides: Partial<Client>): Client => ({
+  id: 'client-id',
+  denominacion: 'Cliente',
+  razonSocial: 'Cliente SA',
+  ownerId: 'advisor-id',
+  ownerName: 'Asesor',
+  ...overrides,
+} as Client);
+
+const user = (overrides: Partial<User>): User => ({
+  id: 'advisor-id',
+  name: 'Asesor',
+  email: 'asesor@airedesantafe.com.ar',
+  role: 'Asesor',
+  ...overrides,
+} as User);
+
+const payment = (overrides: Partial<PaymentEntry>): PaymentEntry => ({
+  id: 'payment-id',
+  advisorId: 'advisor-id',
+  advisorName: 'Asesor',
+  company: 'Aire',
+  comprobanteNumber: 'FAC-1',
+  razonSocial: 'Cliente SA',
+  amount: 1000,
+  pendingAmount: 1000,
+  dueDate: '2026-07-20',
+  issueDate: '2026-07-01',
+  status: 'Pendiente',
+  createdAt: '2026-07-01',
+  ...overrides,
+} as PaymentEntry);

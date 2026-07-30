@@ -14,7 +14,7 @@ import { OpportunityDetailsDialog } from '@/components/opportunities/opportunity
 import { useToast } from '@/hooks/use-toast';
 import type { DateRange } from 'react-day-picker';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
-import { isWithinInterval, startOfMonth, endOfMonth, addMonths, isSameMonth, format } from 'date-fns';
+import { startOfMonth, endOfMonth, format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -33,12 +33,12 @@ import { AlertCircle, CheckCircle2, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+  billingItemMatchesSearch,
   computeDaysLate,
   getDuplicateInvoiceGroups,
-  getPeriodDurationInMonths,
-  isOfficialSellerName,
+  getBillingVisibleLists,
+  getVisiblePayments,
   normalizeDateForComparison,
-  parseFlexibleDate,
   parsePastedPayments,
   type DuplicateInvoiceGroup,
 } from '@/lib/billing-utils';
@@ -324,134 +324,18 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   }, [userInfo, fetchData]);
 
   const { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices } = useMemo(() => {
-    if (!userInfo || !userInfo.id || !prefsReady) {
-      return { toInvoiceOpps: [], toCollectInvoices: [], paidInvoices: [], creditNoteInvoices: [] };
-    }
-
-    const isDateInRange = (date: Date) => {
-        if (!dateRange?.from || !dateRange?.to) return true;
-        return isWithinInterval(date, { start: dateRange.from, end: dateRange.to });
-    }
-
-    let advisorClientIds: Set<string> | null = null;
-    
-    if (isBoss && selectedAdvisor !== 'all') {
-        if (selectedAdvisor === 'corporativo') {
-             advisorClientIds = new Set(
-                clients
-                  .filter(c => !c.ownerId || c.ownerName?.toUpperCase() === 'CORPORATIVO' || c.ownerName === 'Mario Altamirano')
-                  .map(c => c.id)
-             );
-        } else {
-            advisorClientIds = new Set(clients.filter(c => c.ownerId === selectedAdvisor).map(c => c.id));
-        }
-    }
-
-    let userWonOpps = opportunities.filter(opp => {
-      if (opp.stage !== 'Cerrado - Ganado') return false;
-
-      let isOwner = false;
-      if (isBoss) {
-        isOwner = advisorClientIds ? advisorClientIds.has(opp.clientId) : true;
-      } else {
-        const client = clients.find(c => c.id === opp.clientId);
-        isOwner = client?.ownerId === userInfo.id;
-      }
-      const client = clients.find(c => c.id === opp.clientId);
-      if (isOfficialSellerName(client?.ownerName)) return false;
-      return isOwner;
+    return getBillingVisibleLists({
+      opportunities,
+      invoices,
+      clients,
+      selectedAdvisor,
+      isBoss,
+      user: userInfo,
+      dateRange,
+      markedOnly,
+      isDeletionMarked,
+      prefsReady,
     });
-
-    const toInvoiceOpps: Opportunity[] = [];
-    const invoicesByOppId = invoices.reduce((acc, inv) => {
-        if (!acc[inv.opportunityId]) acc[inv.opportunityId] = [];
-        acc[inv.opportunityId].push(inv);
-        return acc;
-    }, {} as Record<string, Invoice[]>);
-
-    userWonOpps.forEach(opp => {
-        if (!opp.createdAt) return;
-
-        const creationDate = normalizeDateForComparison(opp.createdAt);
-        if (!creationDate) return;
-        const maxPeriodicity = opp.periodicidad?.[0] || 'Ocasional';
-        const durationMonths = getPeriodDurationInMonths(maxPeriodicity);
-
-        if (durationMonths > 0) { 
-            for (let i = 0; i < durationMonths; i++) {
-                const monthDate = addMonths(creationDate, i);
-
-                if (isDateInRange(monthDate)) {
-        const hasInvoiceForMonth = (invoicesByOppId[opp.id] || []).some(inv => {
-                        const invoiceDate = normalizeDateForComparison(inv.date);
-                        return invoiceDate && !inv.isCreditNote && isSameMonth(invoiceDate, monthDate);
-                    });
-
-                    if (!hasInvoiceForMonth) {
-                        const virtualOpp = {
-                            ...opp,
-                            id: `${opp.id}_${monthDate.toISOString()}`,
-                            closeDate: monthDate.toISOString(),
-                        };
-                        toInvoiceOpps.push(virtualOpp);
-                    }
-                }
-            }
-        } else { 
-            if (isDateInRange(creationDate)) {
-                const hasInvoiceInMonth = (invoicesByOppId[opp.id] || []).some(inv => {
-                    const invoiceDate = normalizeDateForComparison(inv.date);
-                    return invoiceDate && !inv.isCreditNote && isSameMonth(invoiceDate, creationDate);
-                });
-
-                if (!hasInvoiceInMonth) {
-                    toInvoiceOpps.push({ ...opp, closeDate: creationDate.toISOString() });
-                }
-            }
-        }
-    });
-
-    let userFilteredInvoices = invoices;
-    if (isBoss) {
-      if (selectedAdvisor !== 'all') {
-        const advisorOppIds = new Set(opportunities.filter(o => advisorClientIds?.has(o.clientId)).map(o => o.id));
-        userFilteredInvoices = invoices.filter(inv => advisorOppIds.has(inv.opportunityId));
-      }
-    } else {
-      const userClientIds = new Set(clients.filter(c => c.ownerId === userInfo.id).map(c => c.id));
-      const userOppIds = new Set(opportunities.filter(o => userClientIds.has(o.clientId)).map(o => o.id));
-      userFilteredInvoices = invoices.filter(inv => userOppIds.has(inv.opportunityId));
-    }
-    
-    const visibleInvoicesBase = userFilteredInvoices.filter(inv => {
-        const opp = opportunities.find(o => o.id === inv.opportunityId);
-        const client = opp ? clients.find(c => c.id === opp.clientId) : undefined;
-        return !isOfficialSellerName(client?.ownerName);
-    });
-    const visibleInvoices = markedOnly ? visibleInvoicesBase.filter(isDeletionMarked) : visibleInvoicesBase;
-
-    const toCollectInvoices = visibleInvoices.filter(inv => {
-        const invoiceDate = normalizeDateForComparison(inv.date);
-        return invoiceDate && isDateInRange(invoiceDate) && inv.status !== 'Pagada' && !inv.isCreditNote;
-    });
-    const paidInvoices = visibleInvoices.filter(inv => {
-        const paidDate = normalizeDateForComparison(inv.datePaid);
-        return paidDate && isDateInRange(paidDate) && inv.status === 'Pagada';
-    });
-
-    const creditNoteInvoices = visibleInvoices.filter(inv => {
-        if (!inv.isCreditNote) return false;
-        if (!inv.creditNoteMarkedAt) return false;
-        try {
-            const markedAt = normalizeDateForComparison(inv.creditNoteMarkedAt);
-            return !!markedAt && isDateInRange(markedAt);
-        } catch (error) {
-            return false;
-        }
-    });
-
-    return { toInvoiceOpps, toCollectInvoices, paidInvoices, creditNoteInvoices };
-
   }, [opportunities, invoices, clients, selectedAdvisor, isBoss, userInfo, dateRange, markedOnly, isDeletionMarked, prefsReady]);
   
   const visibleInvoiceIds = useMemo(
@@ -460,78 +344,13 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
   );
 
   const filteredPayments = useMemo(() => {
-    if (!userInfo) return [] as PaymentEntry[];
-
-    let baseList: PaymentEntry[] = [];
-    
-    if (isBoss) {
-        if (selectedAdvisor === 'all') {
-            baseList = payments;
-        } else if (selectedAdvisor === 'corporativo') {
-            baseList = payments.filter(p => !p.advisorId || p.advisorName?.toUpperCase() === 'CORPORATIVO' || p.advisorName === 'Mario Altamirano');
-        } else {
-            baseList = payments.filter((p) => p.advisorId === selectedAdvisor);
-        }
-    } else {
-        baseList = payments.filter((p) => p.advisorId === userInfo.id);
-    }
-
-    const parseIssueDate = (value?: string | null) => parseFlexibleDate(value);
-
-    const parseDueDate = (value?: string | null) => parseFlexibleDate(value);
-
-    return [...baseList]
-      .filter(entry => !isOfficialSellerName(entry.advisorName))
-      .map((entry) => ({
-        ...entry,
-        daysLate: computeDaysLate(entry.dueDate || undefined) ?? entry.daysLate,
-      }))
-      .sort((a, b) => {
-        const aDate = parseDueDate(a.dueDate) ?? parseIssueDate(a.issueDate) ?? parseIssueDate(a.createdAt) ?? new Date(0);
-        const bDate = parseDueDate(b.dueDate) ?? parseIssueDate(b.issueDate) ?? parseIssueDate(b.createdAt) ?? new Date(0);
-        return aDate.getTime() - bDate.getTime();
-      });
+    return getVisiblePayments({ payments, isBoss, selectedAdvisor, user: userInfo });
   }, [isBoss, payments, selectedAdvisor, userInfo]);
 
-  // --- Search Logic Implementation ---
   const filterItem = useCallback((item: Invoice | Opportunity | PaymentEntry) => {
-    if (!searchTerm) return true;
-    const lowerTerm = searchTerm.toLowerCase();
-    
-    // 1. PaymentEntry Check
-    if ('company' in item) { // Duck typing for PaymentEntry
-        const payment = item as PaymentEntry;
-        if (payment.company.toLowerCase().includes(lowerTerm)) return true;
-        if (payment.comprobanteNumber?.toLowerCase().includes(lowerTerm)) return true;
-        if (payment.razonSocial?.toLowerCase().includes(lowerTerm)) return true;
-        return false;
-    }
-
-    // 2. Invoice Check
-    if ('invoiceNumber' in item && item.invoiceNumber) {
-        if (item.invoiceNumber.toLowerCase().includes(lowerTerm)) return true;
-    }
-
-    // 3. Client Check (for Invoice and Opportunity)
-    let client: Client | undefined;
-    if ('clientId' in item) {
-        // Opportunity
-        client = clientsMap[item.clientId];
-    } else {
-        // Invoice
-        const opp = opportunitiesMap[item.opportunityId];
-        if (opp) client = clientsMap[opp.clientId];
-    }
-
-    if (client) {
-        if (client.denominacion.toLowerCase().includes(lowerTerm)) return true;
-        if (client.razonSocial?.toLowerCase().includes(lowerTerm)) return true;
-    }
-    
-    return false;
+    return billingItemMatchesSearch({ item, searchTerm, clientsMap, opportunitiesMap });
   }, [searchTerm, clientsMap, opportunitiesMap]);
 
-  // Apply filter to all lists
   const filteredToInvoiceOpps = useMemo(() => toInvoiceOpps.filter(filterItem), [toInvoiceOpps, filterItem]);
   const filteredToCollectInvoices = useMemo(() => toCollectInvoices.filter(filterItem), [toCollectInvoices, filterItem]);
   const filteredPaidInvoices = useMemo(() => paidInvoices.filter(filterItem), [paidInvoices, filterItem]);
