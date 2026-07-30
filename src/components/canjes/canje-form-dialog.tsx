@@ -11,10 +11,10 @@ import {
   CheckCircle2,
   ClipboardList,
   ExternalLink,
-  FilePlus2,
+
   Loader2,
   PlusCircle,
-  ReceiptText,
+
   Send,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -30,9 +30,9 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { ClientCombobox } from '@/components/clients/client-combobox';
-import { getAdvertisingOrdersByCanjeId, getInvoicesByCanjeId } from '@/lib/api/canjes';
+import { getAdvertisingOrdersByCanjeId } from '@/lib/api/canjes';
 import { getAdvertisingOrderFinancialSummary } from '@/lib/advertising-order-utils';
-import type { AdvertisingOrder, Canje, CanjeEstado, CanjeModalidad, CanjeTipo, Client, Invoice, NecesidadResolucion, User } from '@/lib/types';
+import type { AdvertisingOrder, Canje, CanjeEstado, CanjeModalidad, CanjeTipo, Client, NecesidadResolucion, User } from '@/lib/types';
 import { canjeEstados, canjeModalidades, canjeTipos, necesidadResoluciones } from '@/lib/types';
 
 type NeedFormData = Omit<Canje, 'id' | 'fechaCreacion'>;
@@ -102,7 +102,7 @@ const stepStyles: Record<string, string> = {
 export function CanjeFormDialog({ isOpen, onOpenChange, onSave, canje = null, clients, users, currentUser }: CanjeFormDialogProps) {
   const [formData, setFormData] = useState<NeedFormData>(initialFormData());
   const [orders, setOrders] = useState<AdvertisingOrder[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingRelated, setIsLoadingRelated] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkflowTab>('pedido');
@@ -130,16 +130,15 @@ export function CanjeFormDialog({ isOpen, onOpenChange, onSave, canje = null, cl
     const nextData = canje ? { ...initialFormData(), ...canje, tipoResolucion: canje.tipoResolucion || (canje.estado === 'Aprobado' ? 'Canje' : 'Pendiente') } : initialFormData();
     setFormData(nextData);
     setOrders([]);
-    setInvoices([]);
+
     setIsSaving(false);
     setActiveTab('pedido');
 
     if (!canje?.id) return;
     setIsLoadingRelated(true);
-    Promise.all([getAdvertisingOrdersByCanjeId(canje.id, canje.advertisingOrderIds || []), getInvoicesByCanjeId(canje.id)])
-      .then(([relatedOrders, relatedInvoices]) => {
+    Promise.all([getAdvertisingOrdersByCanjeId(canje.id, canje.advertisingOrderIds || [])])
+      .then(([relatedOrders]) => {
         setOrders(relatedOrders);
-        setInvoices(relatedInvoices);
       })
       .catch(error => {
         console.error('Error loading need relations', error);
@@ -259,7 +258,7 @@ export function CanjeFormDialog({ isOpen, onOpenChange, onSave, canje = null, cl
     }));
   };
 
-  const invoicesForOrder = (orderId?: string) => invoices.filter(invoice => invoice.orderId === orderId);
+
   const createOrderHref = canje?.id && formData.clienteId ? `/publicidad/new?canjeId=${encodeURIComponent(canje.id)}&clientId=${encodeURIComponent(formData.clienteId)}` : '#';
 
   const StepChip = ({ tab, label, icon: Icon }: { tab: WorkflowTab; label: string; icon: typeof ClipboardList }) => {
@@ -497,7 +496,7 @@ export function CanjeFormDialog({ isOpen, onOpenChange, onSave, canje = null, cl
                     </div>
                     {!isLoadingRelated && orders.length === 0 && <div className="rounded-md border border-dashed p-5 text-center text-sm text-muted-foreground">Todavía no hay órdenes vinculadas.</div>}
                     {orders.map(order => {
-                      const orderInvoices = invoicesForOrder(order.id);
+
                       return (
                         <div key={order.id} className="rounded-md border p-4">
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -507,30 +506,9 @@ export function CanjeFormDialog({ isOpen, onOpenChange, onSave, canje = null, cl
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button type="button" variant="outline" size="sm" asChild><Link href={`/publicidad/${order.id}`}><ExternalLink className="mr-2 h-4 w-4" /> Ver detalle</Link></Button>
-                              {formData.modalidad !== 'AVION' && (
-                                <Button type="button" variant="outline" size="sm" asChild>
-                                  <Link href={`/invoices?canjeId=${encodeURIComponent(canje?.id || '')}&orderId=${encodeURIComponent(order.id || '')}&clientId=${encodeURIComponent(order.clientId)}&opportunityId=${encodeURIComponent(order.opportunityId || '')}`}>
-                                    <FilePlus2 className="mr-2 h-4 w-4" /> Cargar factura
-                                  </Link>
-                                </Button>
-                              )}
                             </div>
                           </div>
-                          {formData.modalidad !== 'AVION' && (
-                            <div className="mt-3 border-t pt-3">
-                              <p className="mb-2 text-xs font-medium uppercase text-muted-foreground">Facturas relacionadas</p>
-                              {orderInvoices.length ? (
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  {orderInvoices.map(invoice => (
-                                    <div key={invoice.id} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-                                      <span><ReceiptText className="mr-2 inline h-4 w-4" />{invoice.invoiceNumber}</span>
-                                      <span className="font-medium">${Number(invoice.amount || 0).toLocaleString('es-AR')}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : <p className="text-sm text-muted-foreground">Sin facturas cargadas para esta orden.</p>}
-                            </div>
-                          )}
+
                         </div>
                       );
                     })}

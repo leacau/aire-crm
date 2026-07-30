@@ -167,7 +167,6 @@ export function AppSidebar() {
       items: [
         { title: 'Cobranzas', href: '/billing', icon: DollarSign, screenName: 'Billing' },
         { title: 'Cobranzas Tango', href: '/collections', icon: Scale, screenName: 'Billing' },
-        { title: 'Facturas', href: '/invoices', icon: FileText, screenName: 'Invoices' },
         { title: 'Control Facturación', href: '/billing-requests', icon: FileText, screenName: 'BillingRequests' },
       ]
     },

@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { opportunityStages } from '@/lib/data';
-import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, InvoiceStatus, Invoice, ProposalItem, SupervisorComment, AdvertisingOrder, Program, OpportunityPeriod } from '@/lib/types';
-import { periodicidadOptions, formaDePagoOptions, invoiceStatusOptions } from '@/lib/types';
+import type { Opportunity, OpportunityStage, BonificacionEstado, Agency, Periodicidad, FormaDePago, ProposalFile, OrdenPautado, ProposalItem, SupervisorComment, AdvertisingOrder, Program, OpportunityPeriod } from '@/lib/types';
+import { periodicidadOptions, formaDePagoOptions } from '@/lib/types';
 import { useAuth } from '@/hooks/use-auth';
 import { Checkbox } from '../ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
@@ -33,7 +33,6 @@ import { es } from 'date-fns/locale';
 import { getAgencies, createAgency } from '@/lib/api/agencies';
 import { getAdvertisingOrdersByOpportunity, deleteAdvertisingOrder } from '@/lib/api/advertising-orders';
 import { autoUpdateCoachingSession } from '@/lib/api/coaching';
-import { createInvoice, deleteInvoice, getInvoices, getInvoicesForOpportunity, updateInvoice } from '@/lib/api/invoices';
 import { updateOpportunity as persistOpportunity } from '@/lib/api/opportunities';
 import { getPrograms } from '@/lib/api/programs';
 import { getSupervisorCommentsForEntity } from '@/lib/api/supervisor-comments';
@@ -41,9 +40,7 @@ import { PlusCircle, Clock, Trash2, Save, CalendarIcon, Mail, Briefcase, Externa
 import { Spinner } from '../ui/spinner';
 import { TaskFormDialog } from './task-form-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OrdenPautadoFormDialog } from './orden-pautado-form-dialog';
-import { sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { CommentThread } from '@/components/comments/comment-thread';
 import Link from 'next/link';
 
@@ -68,7 +65,7 @@ interface OpportunityDetailsDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onUpdate: (opportunity: Partial<Opportunity>) => void | Promise<void>;
-  onCreate?: (opportunity: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void | Promise<void>;
+  onCreate?: (opportunity: Omit<Opportunity, 'id'>) => void | Promise<void>;
   onRenew?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   onManagePeriods?: (opportunity: Partial<Opportunity>) => void | Promise<void>;
   client?: {id: string, name: string, ownerName?: string, ownerId?: string}
@@ -178,7 +175,6 @@ export function OpportunityDetailsDialog({
   const router = useRouter(); 
   
   const [agencies, setAgencies] = useState<Agency[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [advertisingOrders, setAdvertisingOrders] = useState<AdvertisingOrder[]>([]);
 
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
@@ -200,9 +196,6 @@ export function OpportunityDetailsDialog({
 
   const isEditing = !!opportunity;
   const canManageContractPeriods = hasManagementPrivileges(userInfo);
-
-  const [newInvoiceRow, setNewInvoiceRow] = useState<{number: string, date: string, amount: string | number}>({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
-  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
 
   const [editedOpportunity, setEditedOpportunity] = useState<Partial<Opportunity>>(() =>
     isEditing ? opportunity : getInitialOpportunityData(client)
@@ -294,13 +287,6 @@ export function OpportunityDetailsDialog({
   const selectedManualDate = editedOpportunity.manualUpdateDate ? safeParseManualDate(editedOpportunity.manualUpdateDate) : null;
   const hasConfirmedInitialValidity = Boolean(opportunity?.startDate && opportunity?.endDate);
   
-  const fetchInvoices = useCallback(async () => {
-    if (opportunity) {
-        const fetchedInvoices = await getInvoicesForOpportunity(opportunity.id);
-        setInvoices(fetchedInvoices);
-    }
-  }, [opportunity]);
-
   const fetchAdOrders = useCallback(async () => {
       if (opportunity) {
           const orders = await getAdvertisingOrdersByOpportunity(opportunity.id);
@@ -329,14 +315,12 @@ export function OpportunityDetailsDialog({
             .catch(() => toast({ title: "Error al cargar agencias", variant: "destructive" }));
 
         if (isEditing) {
-            fetchInvoices();
             fetchAdOrders(); 
         } else {
-            setInvoices([]);
             setAdvertisingOrders([]);
         }
     }
-  }, [opportunity, isOpen, client, toast, fetchInvoices, fetchAdOrders, isEditing, initialTab]);
+  }, [opportunity, isOpen, client, toast, fetchAdOrders, isEditing, initialTab]);
   
   const handleAgencyCreated = (newAgency: Agency) => {
     setAgencies(prev => [...prev, newAgency].sort((a,b) => a.name.localeCompare(b.name)));
@@ -436,7 +420,7 @@ export function OpportunityDetailsDialog({
             if (newOpp.followUpDone?.trim()) newOpp.followUpDoneUpdatedAt = now;
             if (newOpp.followUpCurrent?.trim()) newOpp.followUpCurrentUpdatedAt = now;
             if (newOpp.followUpNext?.trim()) newOpp.followUpNextUpdatedAt = now;
-            await onCreate(newOpp, []);
+            await onCreate(newOpp);
         }
         onOpenChange(false);
     } catch (error) {
@@ -542,7 +526,6 @@ export function OpportunityDetailsDialog({
     await persistOpportunity(
       opportunity.id,
       update,
-      undefined,
       management ? { manageContractPeriods: true } : undefined,
     );
     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...update } }));
@@ -665,79 +648,6 @@ export function OpportunityDetailsDialog({
     }));
   };
 
-  const handleSaveNewInvoice = async () => {
-    if (!opportunity || !userInfo) return;
-    
-    const inputRaw = sanitizeInvoiceNumber(newInvoiceRow.number);
-    
-    if (!inputRaw || !newInvoiceRow.amount || Number(newInvoiceRow.amount) <= 0) {
-      toast({ title: 'Datos de factura incompletos', description: 'Número de factura y monto son requeridos.', variant: 'destructive'});
-      return;
-    }
-
-    setIsSavingInvoice(true);
-
-    try {
-        const allExistingInvoices = await getInvoices();
-        const getSignificant = (s: string) => s.replace(/^0+/, '');
-        const inputSignificant = getSignificant(inputRaw);
-        const isInputShort = inputSignificant.length >= 4 && inputSignificant.length <= 6;
-
-        const hasDuplicate = allExistingInvoices.some(inv => {
-            const existingRaw = sanitizeInvoiceNumber(inv.invoiceNumber || '');
-            const existingSignificant = getSignificant(existingRaw);
-            const isExistingShort = existingSignificant.length >= 4 && existingSignificant.length <= 6;
-
-            if (inputRaw === existingRaw) return true;
-            if (isInputShort && existingRaw.length > inputRaw.length) {
-                if (existingRaw.endsWith(inputRaw) || existingRaw.endsWith(inputSignificant)) return true;
-            }
-            if (isExistingShort && inputRaw.length > existingRaw.length) {
-                if (inputRaw.endsWith(existingRaw) || inputRaw.endsWith(existingSignificant)) return true;
-            }
-            return false;
-        });
-
-        if (hasDuplicate) {
-            toast({ title: `Factura duplicada #${newInvoiceRow.number}`, description: 'El número coincide con una factura existente en el sistema.', variant: 'destructive' });
-            return;
-        }
-
-        const newInvoice: Omit<Invoice, 'id'> = {
-            opportunityId: opportunity.id,
-            invoiceNumber: inputRaw,
-            amount: Number(newInvoiceRow.amount),
-            date: newInvoiceRow.date,
-            status: 'Generada',
-            dateGenerated: new Date().toISOString(),
-        };
-
-        await createInvoice(newInvoice);
-
-        toast({ title: "Factura Guardada" });
-        fetchInvoices();
-        setNewInvoiceRow({ number: '', date: new Date().toISOString().split('T')[0], amount: '' });
-
-    } catch (error) {
-        console.error("Error creating invoice", error);
-        toast({ title: "Error al guardar la factura", variant: "destructive" });
-    } finally {
-        setIsSavingInvoice(false);
-    }
-  };
-  
-  const handleDeleteInvoice = async (invoiceId: string) => {
-    if (!opportunity || !userInfo) return;
-    try {
-      await deleteInvoice(invoiceId, opportunity.clientName);
-      toast({ title: 'Factura eliminada'});
-      fetchInvoices();
-    } catch (error) {
-      console.error("Error deleting invoice", error);
-      toast({ title: 'Error al eliminar la factura', variant: 'destructive'});
-    }
-  }
-
   const canEditBonus = isEditing && (editedOpportunity.stage === 'Negociación' || editedOpportunity.stage === 'Cerrado - Ganado' || editedOpportunity.stage === 'Negociación a Aprobar');
   const hasBonusRequest = !!editedOpportunity.bonificacionDetalle?.trim();
   const canEditCreationDate = isBoss;
@@ -762,7 +672,6 @@ export function OpportunityDetailsDialog({
       }
   };
 
-  const isInvoiceDateInvalid = editedOpportunity.finalizationDate && newInvoiceRow.date > editedOpportunity.finalizationDate;
 
   return (
     <>
@@ -1264,82 +1173,9 @@ export function OpportunityDetailsDialog({
                     )}
                 </div>
             )}
-            <fieldset disabled={!isEditing} className="space-y-4">
-                {!isEditing && (
-                    <div className="text-center text-sm text-muted-foreground p-4 border rounded-md bg-muted/50">
-                        Guarda primero la oportunidad para poder cargar facturas.
-                    </div>
-                )}
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Nº Factura</TableHead>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead>Monto</TableHead>
-                            <TableHead>Estado</TableHead>
-                            {isEditing && <TableHead className="w-12"></TableHead>}
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {invoices.map(invoice => {
-                            const amountValue = Number(invoice.amount ?? 0);
-                            const safeAmount = Number.isFinite(amountValue) ? amountValue : 0;
-                            return (
-                            <TableRow key={invoice.id}>
-                                <TableCell>{invoice.invoiceNumber}</TableCell>
-                                <TableCell>{invoice.date ? format(parseISO(invoice.date), 'P', { locale: es }) : '-'}</TableCell>
-                                <TableCell>${safeAmount.toLocaleString('es-AR')}</TableCell>
-                                <TableCell>{invoice.status}</TableCell>
-                                {isEditing &&
-                                  <TableCell>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteInvoice(invoice.id)}>
-                                          <Trash2 className="h-4 w-4 text-destructive" />
-                                      </Button>
-                                  </TableCell>
-                                }
-                            </TableRow>
-                        )})}
-                        {invoices.length === 0 && (
-                            <TableRow>
-                                <TableCell colSpan={isEditing ? 5 : 4} className="h-24 text-center">No hay facturas para esta oportunidad.</TableCell>
-                            </TableRow>
-                        )}
-                         <TableRow>
-                              <TableCell>
-                                  <Input
-                                      placeholder="0001-00123456"
-                                      value={newInvoiceRow.number}
-                                      onChange={(e) => setNewInvoiceRow(prev => ({...prev, number: sanitizeInvoiceNumber(e.target.value)}))}
-                                  />
-                              </TableCell>
-                             <TableCell>
-                                <Input 
-                                    type="date" 
-                                    value={newInvoiceRow.date}
-                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, date: e.target.value}))}
-                                />
-                            </TableCell>
-                             <TableCell>
-                                <Input 
-                                    type="number"
-                                    placeholder="0.00"
-                                    value={newInvoiceRow.amount}
-                                    onChange={(e) => setNewInvoiceRow(prev => ({...prev, amount: e.target.value}))}
-                                />
-                            </TableCell>
-                             <TableCell colSpan={isEditing ? 2 : 1}>
-                                <Button onClick={handleSaveNewInvoice} size="sm" disabled={isSavingInvoice || isInvoiceDateInvalid}>
-                                    {isSavingInvoice ? <Spinner size="small" /> : <Save className="mr-2 h-4 w-4"/>}
-                                    Guardar Factura
-                                </Button>
-                             </TableCell>
-                        </TableRow>
-                    </TableBody>
-                </Table>
-                 {isInvoiceDateInvalid && (
-                    <p className="text-xs text-destructive mt-1">La fecha de la factura no puede ser posterior a la fecha de finalización de la propuesta.</p>
-                )}
-            </fieldset>
+            <div className="rounded-md border bg-muted/50 p-4 text-sm text-muted-foreground">
+                La carga manual de facturas fue retirada. Los comprobantes y totales deben consultarse desde la integracion con Tango.
+            </div>
           </TabsContent>
 
         </Tabs>

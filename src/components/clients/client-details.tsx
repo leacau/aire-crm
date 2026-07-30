@@ -1,5 +1,5 @@
 'use client'
-import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, Invoice, CommercialNote, Program } from '@/lib/types';
+import type { Client, Opportunity, Person, ClientActivity, ClientActivityType, ActivityLog, User, CommercialNote, Program } from '@/lib/types';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import {
@@ -200,7 +200,7 @@ export function ClientDetails({
   client: Client;
   onUpdate: (data: Partial<Omit<Client, 'id'>>) => void;
   onValidateCuit: (cuit: string, clientId?: string) => Promise<string | false>;
-  onCreateOpportunity: (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[]) => void;
+  onCreateOpportunity: (newOppData: Omit<Opportunity, 'id'>) => void;
   initialOpportunityId?: string;
 }) {
   const { userInfo, isBoss, getGoogleAccessToken } = useAuth();

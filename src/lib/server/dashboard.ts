@@ -1,6 +1,5 @@
 import { listClientActivitiesServer } from '@/lib/server/client-activities';
 import { listClientsServer } from '@/lib/server/clients';
-import { listInvoicesServer } from '@/lib/server/invoices';
 import { listOpportunitiesServer } from '@/lib/server/opportunities';
 import { listPaymentsServer } from '@/lib/server/payments';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
@@ -24,16 +23,14 @@ export async function getDashboardBootstrapServer(requester: ServerUser, include
 
   if (!includeHeavy) return base;
 
-  const [opportunities, invoices, paymentEntries] = await Promise.all([
+  const [opportunities, paymentEntries] = await Promise.all([
     listOpportunitiesServer('active', null, requester),
-    listInvoicesServer({ dashboard: true, requester }),
     listPaymentsServer({ pending: true, requester }),
   ]);
 
   return {
     ...base,
     opportunities,
-    invoices,
     paymentEntries: hasServerManagementPrivileges(requester)
       ? paymentEntries
       : paymentEntries.filter(payment => payment.advisorId === requester.uid),

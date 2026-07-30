@@ -1,7 +1,7 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { AdvertisingOrder, BillingRequest, Client, ClientActivity, Invoice, Opportunity, Person } from '@/lib/types';
+import type { AdvertisingOrder, BillingRequest, Client, ClientActivity, Opportunity, Person } from '@/lib/types';
 import type {
   ClientTangoIdField,
   ClientTangoMappingOptions,
@@ -127,14 +127,6 @@ export async function getOpportunitiesByClientId(clientId: string): Promise<Oppo
     { method: 'GET' },
   );
   return result.opportunities;
-}
-
-export async function getInvoicesForClient(clientId: string): Promise<Invoice[]> {
-  const result = await apiRequest<{ invoices: Invoice[] }>(
-    `/api/clients/${encodeURIComponent(clientId)}/invoices`,
-    { method: 'GET' },
-  );
-  return result.invoices;
 }
 
 export async function getBillingRequestsByClient(clientId: string): Promise<BillingRequest[]> {

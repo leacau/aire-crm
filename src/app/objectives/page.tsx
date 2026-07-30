@@ -9,13 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle, TrendingUp, TrendingDown } from 'lucide-react';
 import { getClients } from '@/lib/api/clients';
-import { getInvoices } from '@/lib/api/invoices';
 import { getOpportunities } from '@/lib/api/opportunities';
 import { getProspects } from '@/lib/api/prospects';
 import { getSupervisorCommentThreadsForUser } from '@/lib/api/supervisor-comments';
 import { getObjectiveVisibilityConfig } from '@/lib/api/system';
 import { getAllUsers } from '@/lib/api/users';
-import type { Opportunity, Invoice, Client, User, Prospect, SupervisorComment } from '@/lib/types';
+import type { Opportunity, Client, User, Prospect, SupervisorComment } from '@/lib/types';
 import { addMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO, format, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -34,7 +33,6 @@ const Confetti = dynamic(() => import('react-dom-confetti'), { ssr: false });
 export default function ObjectivesPage() {
   const { userInfo, loading: authLoading, isBoss, getGoogleAccessToken } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [tangoObjectiveInvoices, setTangoObjectiveInvoices] = useState<TangoObjectiveInvoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -61,9 +59,8 @@ export default function ObjectivesPage() {
       const advisorsPromise = isBoss ? getAllUsers('Asesor') : Promise.resolve([] as User[]);
       const loadData = async () => {
         try {
-          const [opps, invs, cls, advs, prs, visibility] = await Promise.all([
+          const [opps, cls, advs, prs, visibility] = await Promise.all([
             getOpportunities(),
-            getInvoices(),
             getClients(),
             advisorsPromise,
             getProspects(),
@@ -71,7 +68,6 @@ export default function ObjectivesPage() {
           ]);
 
           setOpportunities(opps);
-          setInvoices(invs);
           setClients(cls);
           setAdvisors(advs);
           setProspects(prs);
@@ -245,11 +241,11 @@ export default function ObjectivesPage() {
       user: userInfo,
       opportunities: includeOperational ? opportunities : [],
       clients,
-      invoices: includeOperational ? invoices : [],
+      invoices: [],
       prospects: includeOperational ? prospects : [],
       commentThreads,
     });
-  }, [userInfo, opportunities, clients, invoices, prospects, commentThreads]);
+  }, [userInfo, opportunities, clients, prospects, commentThreads]);
 
   const handleAlertSelect = useCallback((alert: AdvisorAlert) => {
     setSelectedProspect(null);

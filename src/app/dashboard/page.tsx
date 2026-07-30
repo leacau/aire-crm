@@ -238,7 +238,7 @@ export default function DashboardPage() {
         setClients(data.clients);
         setTasks(data.tasks);
         setOpportunities(data.opportunities);
-        setInvoices(data.invoices);
+        setInvoices([]);
         setPaymentEntries(data.paymentEntries);
         
         if (isBoss) {

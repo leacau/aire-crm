@@ -1,7 +1,7 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { AdvertisingOrder, Canje, Invoice } from '@/lib/types';
+import type { AdvertisingOrder, Canje } from '@/lib/types';
 
 export async function getCanjes(): Promise<Canje[]> {
   const result = await apiRequest<{ canjes: Canje[] }>('/api/canjes', { method: 'GET' });
@@ -45,12 +45,4 @@ export async function getAdvertisingOrdersByCanjeId(
     { method: 'GET' },
   );
   return result.orders;
-}
-
-export async function getInvoicesByCanjeId(canjeId: string): Promise<Invoice[]> {
-  const result = await apiRequest<{ invoices: Invoice[] }>(
-    `/api/canjes/${encodeURIComponent(canjeId)}/invoices`,
-    { method: 'GET' },
-  );
-  return result.invoices;
 }

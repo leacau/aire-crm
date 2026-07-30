@@ -259,7 +259,7 @@ const KanbanCard = ({
 
   const handleManagePeriods = async (updatedOpp: Partial<Opportunity>) => {
     if (!userInfo) throw new Error('Usuario no autenticado');
-    await updateOpportunity(opportunity.id, updatedOpp, undefined, { manageContractPeriods: true });
+    await updateOpportunity(opportunity.id, updatedOpp, { manageContractPeriods: true });
     window.dispatchEvent(new CustomEvent('opportunityUpdated', { detail: { id: opportunity.id, ...updatedOpp } }));
   };
   

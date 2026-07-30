@@ -5,7 +5,6 @@ import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/aut
 import { filterAccessibleAdvertisingOrders } from '@/lib/server/advertising-order-access';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
-import { mapInvoice } from '@/lib/server/invoices';
 import { getWorkflowAssignmentsServer } from '@/lib/server/workflow-assignments';
 import type { AdvertisingOrder, Canje, HistorialMensualItem } from '@/lib/types';
 
@@ -267,20 +266,4 @@ export async function listCanjeAdvertisingOrdersServer(
 
   const accessibleOrders = await filterAccessibleAdvertisingOrders(orders, requester);
   return accessibleOrders.sort((a, b) => (b.startDate || b.createdAt || '').localeCompare(a.startDate || a.createdAt || ''));
-}
-
-export async function listCanjeInvoicesServer(canjeId: string, requester: ServerUser) {
-  if (!canjeId) return [];
-  const canje = await getCanjeOrFail(canjeId);
-  if (!(await canViewAllCanjes(requester))) {
-    const ownedClientIds = await getOwnedClientIds(requester.uid);
-    if (!canAccessCanje(canje, requester, ownedClientIds)) {
-      throw new CanjeApiError('Forbidden', 403);
-    }
-  }
-
-  const snapshot = await dbAdmin.collection('invoices').where('canjeId', '==', canjeId).get();
-  return snapshot.docs
-    .map(doc => mapInvoice(doc.id, doc.data()))
-    .sort((a, b) => (b.date || b.dateGenerated || '').localeCompare(a.date || a.dateGenerated || ''));
 }

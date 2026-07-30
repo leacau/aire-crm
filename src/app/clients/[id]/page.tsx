@@ -11,9 +11,8 @@ import { Header } from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import type { Client, Opportunity, Invoice } from '@/lib/types';
+import type { Client, Opportunity } from '@/lib/types';
 import { getClient, updateClient, getClients } from '@/lib/api/clients';
-import { createInvoice } from '@/lib/api/invoices';
 import { createOpportunity } from '@/lib/api/opportunities';
 import { useToast } from '@/hooks/use-toast';
 
@@ -92,7 +91,7 @@ export default function ClientPage() {
     }
   };
 
-  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>, pendingInvoices: Omit<Invoice, 'id' | 'opportunityId'>[] = []) => {
+  const handleOpportunityCreate = async (newOppData: Omit<Opportunity, 'id'>) => {
     if(!userInfo || !client) return;
     try {
         const fullNewOpp = {
@@ -102,15 +101,6 @@ export default function ClientPage() {
         }
         const newOppId = await createOpportunity(fullNewOpp);
         
-        if (newOppId && pendingInvoices.length > 0) {
-            for (const invoiceData of pendingInvoices) {
-                await createInvoice({
-                    ...invoiceData,
-                    opportunityId: newOppId,
-                });
-            }
-        }
-
         fetchClientData();
         toast({ title: 'Oportunidad Creada' });
     } catch (error) {

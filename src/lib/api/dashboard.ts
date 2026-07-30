@@ -1,14 +1,13 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { Client, ClientActivity, Invoice, Opportunity, PaymentEntry, User } from '@/lib/types';
+import type { Client, ClientActivity, Opportunity, PaymentEntry, User } from '@/lib/types';
 
 export type DashboardBootstrap = {
   users: User[];
   clients: Client[];
   tasks: ClientActivity[];
   opportunities: Opportunity[];
-  invoices: Invoice[];
   paymentEntries: PaymentEntry[];
 };
 

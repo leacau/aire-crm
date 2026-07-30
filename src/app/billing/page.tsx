@@ -7,7 +7,6 @@ import { Header } from '@/components/layout/header';
 import { useAuth } from '@/hooks/use-auth';
 import { Spinner } from '@/components/ui/spinner';
 import { getBillingBootstrap } from '@/lib/api/billing';
-import { updateInvoice, createInvoice, deleteInvoicesInBatches } from '@/lib/api/invoices';
 import { updateOpportunity } from '@/lib/api/opportunities';
 import { replacePaymentEntriesForAdvisor, updatePaymentEntry, deletePaymentEntries } from '@/lib/api/payments';
 import type { Opportunity, Client, User, Invoice, PaymentEntry } from '@/lib/types';
@@ -20,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillingTable } from '@/components/billing/billing-table';
-import { ToInvoiceTable } from '@/components/billing/to-invoice-table';
 import { getNormalizedInvoiceNumber, sanitizeInvoiceNumber } from '@/lib/invoice-utils';
 import { PaymentsTable } from '@/components/billing/payments-table';
 import { PaymentsSummary, type PaymentSummaryRow } from '@/components/billing/payments-summary';
@@ -523,7 +521,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       setOpportunities(bootstrap.opportunities);
       setClients(bootstrap.clients);
       setAdvisors(bootstrap.advisors);
-      setInvoices(bootstrap.invoices);
+      setInvoices([]);
       setPayments(bootstrap.payments);
         
     } catch (error) {
@@ -914,7 +912,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
             dateGenerated: new Date().toISOString(),
         };
 
-        await createInvoice(newInvoice);
+        throw new Error('La carga manual de facturas fue retirada.');
         toast({ title: 'Factura Creada' });
         
         // Optimistically update UI before refetch
@@ -1133,14 +1131,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
       });
 
       try {
-        const result = await deleteInvoicesInBatches(invoiceIds, {
-          batchSize: 25,
-          resolveOwnerName: resolveOwnerNameForInvoice,
-          onProgress: (progress) => {
-            setDeleteProgress(progress);
-            fetchData({ silent: true });
-          },
-        });
+        const result = { deleted: [] as string[], failed: invoiceIds.map((id) => ({ id, error: 'La eliminacion manual de facturas fue retirada.' })) };
         return result;
       } catch (error) {
         console.error('Error deleting duplicate invoices', error);
@@ -1287,7 +1278,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     try {
       setInvoices(prev => prev.map(inv => inv.id === invoiceId ? {...inv, status: 'Pagada'} : inv));
       
-      await updateInvoice(invoiceId, { status: 'Pagada' });
+      throw new Error('La actualizacion manual de facturas fue retirada.');
 
       toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} marcada como pagada.`});
       setTimeout(fetchData, 300);
@@ -1330,7 +1321,7 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
     setInvoices(prev => prev.map(inv => inv.id === invoiceId ? { ...inv, ...updatePayload } : inv));
 
     try {
-      await updateInvoice(invoiceId, updatePayload);
+      throw new Error('La actualizacion manual de facturas fue retirada.');
       toast({ title: `Factura #${invoiceToUpdate.invoiceNumber} ${nextValue ? 'marcada como NC' : 'sin NC'}` });
       setTimeout(fetchData, 300);
     } catch (error) {
@@ -1501,155 +1492,26 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 </SelectContent>
                 </Select>
             )}
-            {canManageDuplicates && (
-                <Button
-                    variant="outline"
-                    onClick={() => setIsDuplicateModalOpen(true)}
-                    disabled={totalDuplicateInvoices === 0 || isDeletingDuplicates}
-                >
-                    {isDeletingDuplicates ? (
-                    <>
-                        <Spinner size="small" className="mr-2" />
-                        Eliminando duplicados...
-                    </>
-                    ) : (
-                    <>Eliminar duplicados {totalDuplicateInvoices > 0 ? `(${totalDuplicateInvoices})` : ''}</>
-                    )}
-                </Button>
-            )}
         </div>
       </Header>
       <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
         <Tabs defaultValue={initialTab}>
-          <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
-            <TabsTrigger value="to-invoice">A Facturar</TabsTrigger>
-            <TabsTrigger value="to-collect">A Cobrar</TabsTrigger>
-            <TabsTrigger value="paid">Pagado</TabsTrigger>
-            <TabsTrigger value="credit-notes">NC</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 md:w-[360px]">
             <TabsTrigger value="payments">Mora</TabsTrigger>
             <TabsTrigger value="events">Eventos</TabsTrigger>
           </TabsList>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="marked-only"
-                checked={markedOnly}
-                onCheckedChange={(value) => handleToggleMarkedOnly(value === true)}
-              />
-              <Label htmlFor="marked-only" className="text-sm text-muted-foreground">
-                Solo marcadas
-              </Label>
-            </div>
-            {canManageDeletionMarks ? (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  disabled={!hasInvoiceSelection}
-                  onClick={handleRestoreSelectedDeletionMarks}
-                >
-                  Quitar marca
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={!hasInvoiceSelection}
-                  onClick={handleMarkSelectedInvoicesForDeletion}
-                >
-                  Marcar para eliminar
-                </Button>
-              </div>
-            ) : null}
-          </div>
-          <TabsContent value="to-invoice">
-            {renderWithPrefs(
-              <ToInvoiceTable 
-                  items={filteredToInvoiceOpps}
-                  clientsMap={clientsMap}
-                  onCreateInvoice={handleCreateInvoice}
-                  onRowClick={handleRowClick}
-              />
-            )}
-          </TabsContent>
-          <TabsContent value="to-collect">
-            {renderDeletionMarkActions(filteredToCollectInvoices)}
-            <BillingTable
-              items={filteredToCollectInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onMarkAsPaid={handleMarkAsPaid}
-              onToggleCreditNote={handleToggleCreditNote}
-              sorting={toCollectTableState.sorting}
-              setSorting={toCollectTableState.setSorting}
-              columnVisibility={toCollectTableState.columnVisibility}
-              setColumnVisibility={toCollectTableState.setColumnVisibility}
-              columnOrder={toCollectTableState.columnOrder}
-              setColumnOrder={toCollectTableState.setColumnOrder}
-              isReady={prefsReady}
-              selectedInvoiceIds={selectedInvoiceIds}
-              onToggleSelect={handleToggleInvoiceSelection}
-              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredToCollectInvoices)}
-            />
-          </TabsContent>
-           <TabsContent value="paid">
-            {renderDeletionMarkActions(filteredPaidInvoices)}
-            <BillingTable
-              items={filteredPaidInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              sorting={paidTableState.sorting}
-              setSorting={paidTableState.setSorting}
-              columnVisibility={paidTableState.columnVisibility}
-              setColumnVisibility={paidTableState.setColumnVisibility}
-              columnOrder={paidTableState.columnOrder}
-              setColumnOrder={paidTableState.setColumnOrder}
-              isReady={prefsReady}
-              selectedInvoiceIds={selectedInvoiceIds}
-              onToggleSelect={handleToggleInvoiceSelection}
-              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredPaidInvoices)}
-            />
-          </TabsContent>
-          <TabsContent value="credit-notes">
-            <BillingTable
-              items={filteredCreditNoteInvoices}
-              type="invoices"
-              onRowClick={handleRowClick}
-              clientsMap={clientsMap}
-              usersMap={usersMap}
-              opportunitiesMap={opportunitiesMap}
-              onToggleCreditNote={handleToggleCreditNote}
-              showCreditNoteDate
-              sorting={creditNotesTableState.sorting}
-              setSorting={creditNotesTableState.setSorting}
-              columnVisibility={creditNotesTableState.columnVisibility}
-              setColumnVisibility={creditNotesTableState.setColumnVisibility}
-              columnOrder={creditNotesTableState.columnOrder}
-              setColumnOrder={creditNotesTableState.setColumnOrder}
-              isReady={prefsReady}
-              selectedInvoiceIds={selectedInvoiceIds}
-              onToggleSelect={handleToggleInvoiceSelection}
-              onToggleSelectAll={(checked) => handleToggleAllInvoiceSelection(checked, filteredCreditNoteInvoices)}
-            />
-          </TabsContent>
-          <TabsContent value="events">
-            <EventSummary />
-          </TabsContent>
           <TabsContent value="payments">
             <div className="grid gap-4">
               {isBoss && (
                 <div className="grid gap-3 rounded-lg border bg-card p-4">
                   <p className="text-sm text-muted-foreground">
-                    Pegá las filas que recibís por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
+                    Pega las filas que recibis por mail (separadas por tabulaciones o punto y coma) y reemplazaremos la lista de ese asesor.
                   </p>
                   <textarea
                     className="min-h-[120px] w-full rounded-md border bg-background p-3 text-sm"
                     value={pastedPayments}
                     onChange={(e) => setPastedPayments(e.target.value)}
-                    placeholder="Empresa\tTipo\tNro comprobante\tRazón social\tImporte pendiente\tFecha emisión\tFecha vencimiento\tDías de atraso"
+                    placeholder="Empresa	Tipo	Nro comprobante	Razon social	Importe pendiente	Fecha emision	Fecha vencimiento	Dias de atraso"
                   />
                   <div className="flex justify-end gap-2">
                     <Button onClick={handleImportPayments} disabled={isImportingPayments}>
@@ -1675,6 +1537,9 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
                 </div>
               )}
             </div>
+          </TabsContent>
+          <TabsContent value="events">
+            <EventSummary />
           </TabsContent>
         </Tabs>
       </main>
@@ -1807,7 +1672,8 @@ function BillingPageComponent({ initialTab }: { initialTab: string }) {
 
 function BillingPageWithSuspense() {
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') || 'to-invoice';
+  const requestedTab = searchParams.get('tab') || 'payments';
+  const initialTab = requestedTab === 'events' ? 'events' : 'payments';
   return <BillingPageComponent initialTab={initialTab} />;
 }
 

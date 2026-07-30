@@ -1,7 +1,7 @@
 'use client';
 
 import { apiRequest } from '@/lib/api-client';
-import type { Invoice, Opportunity, OpportunityPeriod } from '@/lib/types';
+import type { Opportunity, OpportunityPeriod } from '@/lib/types';
 
 type UpdateOpportunityResponse = {
   ok: true;
@@ -66,12 +66,11 @@ export async function createQuickOpportunity(title: string, clientId: string, cl
 export async function updateOpportunity(
   opportunityId: string,
   data: Partial<Omit<Opportunity, 'id'>>,
-  pendingInvoices?: Omit<Invoice, 'id' | 'opportunityId'>[],
   options?: { manageContractPeriods?: boolean },
 ): Promise<UpdateOpportunityResponse> {
   return apiRequest<UpdateOpportunityResponse>(`/api/opportunities/${encodeURIComponent(opportunityId)}`, {
     method: 'PATCH',
-    body: { data, pendingInvoices, options },
+    body: { data, options },
   });
 }
 

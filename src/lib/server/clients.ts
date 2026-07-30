@@ -12,7 +12,6 @@ import type {
   BillingRequest,
   Client,
   ClientActivity,
-  Invoice,
   Opportunity,
   Person,
 } from '@/lib/types';
@@ -62,16 +61,6 @@ export function cleanObject<T extends Record<string, unknown>>(value: T): Partia
 
 export function clientResponseValue(value: unknown) {
   return serializeFirestoreValue(value);
-}
-
-function normalizeInvoiceAmount(rawAmount: unknown): number {
-  if (typeof rawAmount === 'number' && Number.isFinite(rawAmount)) return rawAmount;
-  if (typeof rawAmount === 'string') {
-    const parsed = Number(rawAmount.replace(/\s+/g, '').replace(',', '.'));
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  const fallback = Number(rawAmount ?? 0);
-  return Number.isFinite(fallback) ? fallback : 0;
 }
 
 function isTangoSyncedField(value: unknown): value is ClientTangoSyncedField {
@@ -486,31 +475,6 @@ export async function listClientOpportunitiesServer(clientId: string, requester:
   await getClientServer(clientId, requester);
   const snapshot = await dbAdmin.collection('opportunities').where('clientId', '==', clientId).get();
   return snapshot.docs.map(doc => serializeDocument<Opportunity>(doc.id, doc.data()));
-}
-
-export async function listClientInvoicesServer(clientId: string, requester: ServerUser): Promise<Invoice[]> {
-  await getClientServer(clientId, requester);
-  const oppsSnap = await dbAdmin.collection('opportunities').where('clientId', '==', clientId).get();
-  const opportunityIds = oppsSnap.docs.map(doc => doc.id);
-  if (opportunityIds.length === 0) return [];
-
-  const invoices: Invoice[] = [];
-  for (let index = 0; index < opportunityIds.length; index += 30) {
-    const chunk = opportunityIds.slice(index, index + 30);
-    const snapshot = await dbAdmin.collection('invoices').where('opportunityId', 'in', chunk).get();
-    invoices.push(
-      ...snapshot.docs.map(doc => {
-        const invoice = serializeDocument<Invoice>(doc.id, doc.data());
-        return {
-          ...invoice,
-          amount: normalizeInvoiceAmount(invoice.amount),
-          isCreditNote: Boolean(invoice.isCreditNote),
-        };
-      }),
-    );
-  }
-
-  return invoices.sort((a, b) => new Date(b.dateGenerated).getTime() - new Date(a.dateGenerated).getTime());
 }
 
 export async function listClientBillingRequestsServer(

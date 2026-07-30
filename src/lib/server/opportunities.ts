@@ -6,12 +6,7 @@ import { getRequesterName } from '@/lib/server/requester';
 import { hasServerManagementPrivileges, type ServerUser } from '@/lib/server/auth';
 import { logServerActivity } from '@/lib/server/activity';
 import { serializeDocument } from '@/lib/server/firestore';
-import {
-  buildInvoiceCreatePayload,
-  buildMonthlyBillingIncrement,
-  normalizeInvoiceAmount,
-} from '@/lib/server/invoices';
-import type { Client, CommercialItem, Invoice, Opportunity, Program } from '@/lib/types';
+import type { Client, CommercialItem, Opportunity, Program } from '@/lib/types';
 
 export class OpportunityApiError extends Error {
   constructor(
@@ -340,33 +335,6 @@ async function createCommercialItemsFromOpportunity(opportunity: Opportunity, re
   return newItems.length;
 }
 
-async function createPendingInvoices(
-  invoices: Omit<Invoice, 'id' | 'opportunityId'>[] | undefined,
-  opportunityId: string,
-  requesterId: string,
-) {
-  if (!invoices || invoices.length === 0) return 0;
-
-  let created = 0;
-  for (const invoiceData of invoices) {
-    const invoiceToSave = {
-      ...invoiceData,
-      opportunityId,
-    } as Omit<Invoice, 'id'>;
-    await dbAdmin.collection('invoices').add(buildInvoiceCreatePayload(invoiceToSave));
-    created += 1;
-
-    if (invoiceToSave.date && !invoiceToSave.isCreditNote) {
-      const monthKey = invoiceToSave.date.substring(0, 7);
-      const amountToLog = Math.abs(normalizeInvoiceAmount(invoiceToSave.amount));
-      const increment = buildMonthlyBillingIncrement(monthKey, amountToLog, requesterId);
-      await dbAdmin.collection('estadisticas_mensuales').doc(increment.monthKey).set(increment.data, { merge: true });
-    }
-  }
-
-  return created;
-}
-
 export async function listOpportunitiesServer(
   scope: string,
   userId: string | null,
@@ -456,7 +424,6 @@ export async function getOpportunityServer(opportunityId: string) {
 export async function updateOpportunityServer(opportunityId: string, rawBody: unknown, requester: ServerUser) {
   const body = rawBody && typeof rawBody === 'object' ? rawBody as Record<string, unknown> : {};
   const data = (body.data || {}) as Partial<Omit<Opportunity, 'id'>>;
-  const pendingInvoices = body.pendingInvoices as Omit<Invoice, 'id' | 'opportunityId'>[] | undefined;
   const options = body.options && typeof body.options === 'object' ? body.options as Record<string, unknown> : {};
   const manageContractPeriods = Boolean(options.manageContractPeriods);
 
@@ -510,7 +477,6 @@ export async function updateOpportunityServer(opportunityId: string, rawBody: un
     : 0;
 
   await opportunityRef.update(updateResult.updateData);
-  const createdInvoices = await createPendingInvoices(pendingInvoices, opportunityId, requester.uid);
 
   await logServerActivity({
     userId: requester.uid,
@@ -531,7 +497,7 @@ export async function updateOpportunityServer(opportunityId: string, rawBody: un
     isRenewal: updateResult.isRenewal,
     newRenewals: updateResult.newRenewals,
     createdCommercialItems,
-    createdInvoices,
+    createdInvoices: 0,
   };
 }
 
