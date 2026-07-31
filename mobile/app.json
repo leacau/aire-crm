@@ -15,12 +15,22 @@
     },
     "android": {
       "package": "com.airedesantafe.crm",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0f172a"
       }
     },
     "plugins": [
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default",
+          "color": "#2563eb"
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",

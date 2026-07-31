@@ -3,6 +3,7 @@ import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { hasMobileRuntimeConfig, missingMobileEnvNames } from '../config/env';
 import { auth } from '../lib/firebase';
 import { getMobileBootstrap, validateSession } from '../lib/api';
+import { unregisterMobileNotificationToken, useMobileNotifications } from '../lib/notifications';
 import type { AuthSession, MobileBootstrap } from '../lib/types';
 import { signInExternalUser, signInWithGoogle, signOutMobileUser } from './mobile-auth';
 
@@ -30,6 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const configError = hasMobileRuntimeConfig
     ? null
     : `Faltan variables de entorno en el build mobile: ${missingMobileEnvNames.join(', ')}.`;
+
+  useMobileNotifications(firebaseUser, Boolean(session));
 
   const loadSession = useCallback(async (user: FirebaseUser | null, options?: { throwOnError?: boolean }) => {
     if (!user) {
@@ -103,12 +106,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadSession]);
 
   const logout = useCallback(async () => {
+    const currentUser = auth?.currentUser || firebaseUser;
     setError(null);
     setSession(null);
     setBootstrap(null);
     setFirebaseUser(null);
+    if (currentUser) {
+      await unregisterMobileNotificationToken(currentUser);
+    }
     await signOutMobileUser();
-  }, []);
+  }, [firebaseUser]);
 
   const refreshSession = useCallback(async () => {
     await loadSession(auth?.currentUser || null);

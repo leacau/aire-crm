@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Avatar,
   AvatarFallback,
@@ -18,12 +19,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
 import { signOutCurrentUser } from '@/lib/auth-client';
+import { canUseWebNotifications, registerWebNotificationToken } from '@/lib/notifications-client';
 import Link from 'next/link';
-import { LogOut, Settings } from "lucide-react";
+import { Bell, LogOut, Settings } from "lucide-react";
 
 export function UserNav() {
   const { user, userInfo } = useAuth();
+  const { toast } = useToast();
+  const [registeringNotifications, setRegisteringNotifications] = useState(false);
+  const [notificationsSupported, setNotificationsSupported] = useState(false);
 
   const handleSignOut = async () => {
     try {
@@ -37,6 +43,32 @@ export function UserNav() {
   const initials = userInfo?.initials || user?.displayName?.substring(0, 2).toUpperCase() || 'U';
   const displayName = userInfo?.name || user?.displayName || 'Usuario';
   const email = userInfo?.email || user?.email || '';
+
+  useEffect(() => {
+    setNotificationsSupported(canUseWebNotifications());
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    if (!user || registeringNotifications) return;
+    setRegisteringNotifications(true);
+    try {
+      const token = await registerWebNotificationToken(user, { requestPermission: true });
+      toast({
+        title: token ? 'Notificaciones activadas' : 'Notificaciones no activadas',
+        description: token
+          ? 'Este navegador ya puede recibir avisos de Aire CRM.'
+          : 'No se otorgo permiso para mostrar notificaciones.',
+      });
+    } catch (error) {
+      toast({
+        title: 'No se pudieron activar las notificaciones',
+        description: error instanceof Error ? error.message : 'Hubo un error configurando el navegador.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRegisteringNotifications(false);
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -59,6 +91,12 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {notificationsSupported && (
+            <DropdownMenuItem onClick={handleEnableNotifications} disabled={registeringNotifications}>
+              <Bell className="mr-2 h-4 w-4" />
+              <span>{registeringNotifications ? 'Activando...' : 'Activar notificaciones'}</span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
               <Link href="/settings">
                   <Settings className="mr-2 h-4 w-4" />

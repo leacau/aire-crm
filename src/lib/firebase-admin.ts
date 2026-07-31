@@ -73,5 +73,6 @@ function createFirebaseAdminApp() {
 
 const app = createFirebaseAdminApp();
 
+export const firebaseAdminApp = app;
 export const dbAdmin = getFirestore(app);
 export const authAdmin = getAuth(app);

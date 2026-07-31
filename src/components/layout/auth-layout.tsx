@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/layout/app-sidebar';
+import { NotificationRegistrar } from '@/components/notifications/notification-registrar';
 import dynamic from 'next/dynamic';
 
 const ObjectiveReminderBanner = dynamic(
@@ -24,6 +25,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset>
+            <NotificationRegistrar />
             <ObjectiveReminderBanner />
             {children}
           </SidebarInset>
