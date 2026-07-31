@@ -209,52 +209,6 @@ function ApprovalsPageComponent() {
     throw new Error(errorMessage);
   };
 
-  const waitForImages = async (element: HTMLElement) => {
-    const images = Array.from(element.querySelectorAll('img'));
-    await Promise.all(images.map(image => withTimeout(
-      new Promise<void>(resolve => {
-        if (image.complete) {
-          resolve();
-          return;
-        }
-        image.onload = () => resolve();
-        image.onerror = () => resolve();
-      }),
-      5000,
-      'Una imagen del documento no termino de cargar a tiempo.',
-    ).catch(() => undefined)));
-  };
-
-  const createStablePdfCaptureElement = async (sourceElement: HTMLElement) => {
-    const wrapper = document.createElement('div');
-    const clone = sourceElement.cloneNode(true) as HTMLElement;
-    const width = sourceElement.offsetWidth || sourceElement.scrollWidth || 1200;
-
-    wrapper.style.position = 'fixed';
-    wrapper.style.left = '0';
-    wrapper.style.top = '0';
-    wrapper.style.zIndex = '-1000';
-    wrapper.style.pointerEvents = 'none';
-    wrapper.style.opacity = '0.01';
-    wrapper.style.background = '#ffffff';
-    wrapper.style.width = `${width}px`;
-    wrapper.style.overflow = 'visible';
-
-    clone.style.margin = '0';
-    clone.style.transform = 'none';
-    clone.style.background = '#ffffff';
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-
-    await waitForPdfRender();
-    await waitForImages(clone);
-
-    return {
-      element: clone,
-      cleanup: () => wrapper.remove(),
-    };
-  };
-
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
     const people = await getPeopleByClientId(client.id);
 
@@ -270,8 +224,47 @@ function ApprovalsPageComponent() {
       setClientPdfData(null);
     }
   };
+
+  const generateLegacyClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
+    const { default: jsPDF } = await import('jspdf');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFillColor(240, 244, 248);
+    pdf.rect(0, 0, 210, 40, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setTextColor(29, 78, 216);
+    pdf.text('ALTA DE DATOS COMERCIALES', 15, 25);
+
+    let y = 60;
+    const addField = (label: string, value?: string) => {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(`${label}:`, 15, y);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(value || '-', 65, y);
+      y += 12;
+    };
+
+    addField('Anunciante', client.denominacion);
+    addField('Razon Social', client.razonSocial);
+    addField('CUIT', client.cuit);
+    addField('Condicion de IVA', client.condicionIVA);
+    addField('Telefono', client.phone);
+    addField('Email', client.email);
+
+    return pdf.output('datauristring').split(',')[1];
+  };
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
+  const createStablePdfCaptureElement = async (sourceElement: HTMLElement) => ({
+    element: sourceElement,
+    cleanup: () => undefined,
+  });
+
   const generateAdvancedPdf = async (sourceElement: HTMLElement, itemType: ApprovalItemType) => {
+      return generatePaginatedPdfFromElement(sourceElement);
+
       if (itemType !== 'Orden de Publicidad') {
         const stableCapture = await createStablePdfCaptureElement(sourceElement);
         try {
@@ -414,11 +407,16 @@ function ApprovalsPageComponent() {
         'No se pudo consultar el cliente a tiempo.',
       );
       if (clientObj) {
-        clientBase64 = await withTimeout(
-          generateClientSummaryPdfBase64(clientObj),
-          60000,
-          'No se pudo generar el PDF de alta del cliente a tiempo.',
-        );
+        try {
+          clientBase64 = await withTimeout(
+            generateClientSummaryPdfBase64(clientObj),
+            60000,
+            'No se pudo generar el PDF de alta del cliente a tiempo.',
+          );
+        } catch (clientPdfError) {
+          console.warn('No se pudo generar el PDF visual de cliente, se usa respaldo directo:', clientPdfError);
+          clientBase64 = await generateLegacyClientSummaryPdfBase64(clientObj);
+        }
       }
     }
 
