@@ -15,6 +15,7 @@
     },
     "android": {
       "package": "com.airedesantafe.crm",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS"
       ],

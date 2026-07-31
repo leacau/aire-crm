@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthProvider';
+import { registerMobileNotificationToken } from '../lib/notifications';
 import type { AppTab } from './AppShell';
 
 function toStartOfDay(date: Date) {
@@ -16,7 +17,8 @@ function parseDate(value?: string) {
 }
 
 export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) {
-  const { bootstrap, session } = useAuth();
+  const { bootstrap, firebaseUser, session } = useAuth();
+  const [registeringNotifications, setRegisteringNotifications] = useState(false);
   const focus = useMemo(() => {
     const today = toStartOfDay(new Date());
     const tomorrow = new Date(today);
@@ -43,6 +45,26 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) 
       activeClients,
     };
   }, [bootstrap]);
+
+  const enableNotifications = async () => {
+    if (!firebaseUser || registeringNotifications) return;
+
+    setRegisteringNotifications(true);
+    try {
+      const token = await registerMobileNotificationToken(firebaseUser);
+      Alert.alert(
+        'Notificaciones activadas',
+        `Este dispositivo ya puede recibir avisos de Aire CRM.\n\nToken: ${token.slice(0, 12)}...`,
+      );
+    } catch (error) {
+      Alert.alert(
+        'No se pudieron activar notificaciones',
+        error instanceof Error ? error.message : 'Intenta nuevamente.',
+      );
+    } finally {
+      setRegisteringNotifications(false);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -74,6 +96,24 @@ export function HomeScreen({ onOpenTab }: { onOpenTab: (tab: AppTab) => void }) 
             <Text style={styles.focusLabel}>clientes activos</Text>
           </Pressable>
         </View>
+      </View>
+
+      <View style={styles.notificationCard}>
+        <View style={styles.notificationTextBlock}>
+          <Text style={styles.notificationTitle}>Notificaciones</Text>
+          <Text style={styles.notificationCopy}>
+            Activa este dispositivo para recibir avisos de aprobaciones, tareas y novedades del CRM.
+          </Text>
+        </View>
+        <Pressable
+          disabled={registeringNotifications}
+          onPress={enableNotifications}
+          style={[styles.notificationButton, registeringNotifications && styles.disabledButton]}
+        >
+          <Text style={styles.notificationButtonText}>
+            {registeringNotifications ? 'Activando...' : 'Activar'}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.grid}>
@@ -186,6 +226,41 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 12,
     fontWeight: '800',
+  },
+  notificationCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    backgroundColor: '#f0fdf4',
+    padding: 16,
+    gap: 12,
+  },
+  notificationTextBlock: {
+    gap: 4,
+  },
+  notificationTitle: {
+    color: '#14532d',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  notificationCopy: {
+    color: '#166534',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  notificationButton: {
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#16a34a',
+    paddingVertical: 12,
+  },
+  notificationButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   grid: {
     gap: 12,

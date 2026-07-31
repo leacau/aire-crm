@@ -36,6 +36,32 @@ function hasAndroidProject() {
   return fs.existsSync(path.join(process.cwd(), 'android', 'gradlew.bat'));
 }
 
+function prepareGoogleServicesFile() {
+  const destinationPath = path.join(process.cwd(), 'google-services.json');
+  const explicitSource = process.env.GOOGLE_SERVICES_JSON_PATH;
+
+  if (explicitSource) {
+    const sourcePath = path.resolve(explicitSource);
+    if (!fs.existsSync(sourcePath)) {
+      console.error(`GOOGLE_SERVICES_JSON_PATH no existe: ${sourcePath}`);
+      process.exit(1);
+    }
+
+    fs.copyFileSync(sourcePath, destinationPath);
+    console.log(`Prepared google-services.json from ${sourcePath}`);
+    return;
+  }
+
+  if (fs.existsSync(destinationPath)) {
+    console.log('Using existing mobile/google-services.json for Android Firebase services.');
+    return;
+  }
+
+  console.error('No google-services.json found. Android FCM tokens will not work without it.');
+  console.error('Set GOOGLE_SERVICES_JSON_PATH to the Firebase Android google-services.json before building.');
+  process.exit(1);
+}
+
 function shouldSkipPrebuild() {
   return process.argv.includes('--skip-prebuild') || process.env.SKIP_EXPO_PREBUILD === '1';
 }
@@ -72,6 +98,7 @@ if (envFile) {
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
 run('node', ['scripts/check-env.cjs']);
+prepareGoogleServicesFile();
 if (shouldSkipPrebuild()) {
   if (!hasAndroidProject()) {
     console.error('No existe mobile/android para reutilizar. Ejecuta primero el build completo sin --skip-prebuild.');

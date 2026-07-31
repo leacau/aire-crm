@@ -47,6 +47,7 @@ next-env.d.ts
 mobile/.expo
 mobile/dist
 mobile/web-build
+mobile/google-services.json
 mobile/.env.local
 mobile/.env.*.local
 

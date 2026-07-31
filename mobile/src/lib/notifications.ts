@@ -43,14 +43,20 @@ function getDeviceLabel() {
 }
 
 export async function registerMobileNotificationToken(user: User) {
-  if (!Device.isDevice) return null;
+  if (!Device.isDevice) {
+    throw new Error('Las notificaciones push requieren un dispositivo fisico.');
+  }
 
   const hasPermission = await ensureNotificationPermission();
-  if (!hasPermission) return null;
+  if (!hasPermission) {
+    throw new Error('No se otorgo permiso para recibir notificaciones en este dispositivo.');
+  }
 
   const deviceToken = await Notifications.getDevicePushTokenAsync();
   const token = typeof deviceToken.data === 'string' ? deviceToken.data : '';
-  if (!token) return null;
+  if (!token) {
+    throw new Error('Firebase no devolvio un token FCM para este dispositivo.');
+  }
 
   await apiRequest('/api/notifications/tokens', {
     method: 'POST',
