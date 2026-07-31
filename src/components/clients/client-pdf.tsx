@@ -3,7 +3,6 @@
 
 import React from 'react';
 import type { Client, Person } from '@/lib/types';
-import Image from 'next/image';
 
 interface ClientPdfProps {
   client: Client;
@@ -21,7 +20,7 @@ export const ClientPdf = React.forwardRef<HTMLDivElement, ClientPdfProps>(({ cli
     return (
       <div ref={ref} className="bg-white p-12" style={{ width: '210mm', minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
         <header className="flex justify-start mb-16">
-            <Image src="/aire-logo-red.png" alt="AIRE Logo" width={150} height={150} />
+            <img src="/logo.webp" alt="AIRE Logo" width={150} height={150} />
         </header>
 
         <main>

@@ -194,6 +194,21 @@ function ApprovalsPageComponent() {
     throw new Error(errorMessage);
   };
 
+  const waitForElementRef = async (
+    ref: React.RefObject<HTMLElement>,
+    errorMessage: string,
+    timeoutMs = 15000,
+  ): Promise<HTMLElement> => {
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+      await waitForPdfRender();
+      if (ref.current instanceof HTMLElement) return ref.current;
+    }
+
+    throw new Error(errorMessage);
+  };
+
   const waitForImages = async (element: HTMLElement) => {
     const images = Array.from(element.querySelectorAll('img'));
     await Promise.all(images.map(image => withTimeout(
@@ -214,11 +229,12 @@ function ApprovalsPageComponent() {
     const people = await getPeopleByClientId(client.id);
 
     setClientPdfData({ client, contact: people[0] || null });
-    await waitForPdfRender();
 
     try {
-      const element = clientPdfRef.current;
-      if (!element) throw new Error('No se pudo preparar el PDF de alta del cliente.');
+      const element = await waitForElementRef(
+        clientPdfRef,
+        'No se pudo preparar el PDF de alta del cliente.',
+      );
       return generateClientPdfBase64FromElement(element);
     } finally {
       setClientPdfData(null);
@@ -358,7 +374,7 @@ function ApprovalsPageComponent() {
       if (clientObj) {
         clientBase64 = await withTimeout(
           generateClientSummaryPdfBase64(clientObj),
-          25000,
+          60000,
           'No se pudo generar el PDF de alta del cliente a tiempo.',
         );
       }
