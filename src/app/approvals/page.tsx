@@ -225,6 +225,36 @@ function ApprovalsPageComponent() {
     ).catch(() => undefined)));
   };
 
+  const createStablePdfCaptureElement = async (sourceElement: HTMLElement) => {
+    const wrapper = document.createElement('div');
+    const clone = sourceElement.cloneNode(true) as HTMLElement;
+    const width = sourceElement.offsetWidth || sourceElement.scrollWidth || 1200;
+
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '0';
+    wrapper.style.top = '0';
+    wrapper.style.zIndex = '-1000';
+    wrapper.style.pointerEvents = 'none';
+    wrapper.style.opacity = '0.01';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.width = `${width}px`;
+    wrapper.style.overflow = 'visible';
+
+    clone.style.margin = '0';
+    clone.style.transform = 'none';
+    clone.style.background = '#ffffff';
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    await waitForPdfRender();
+    await waitForImages(clone);
+
+    return {
+      element: clone,
+      cleanup: () => wrapper.remove(),
+    };
+  };
+
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
     const people = await getPeopleByClientId(client.id);
 
@@ -241,15 +271,24 @@ function ApprovalsPageComponent() {
     }
   };
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
-  const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
+  const generateAdvancedPdf = async (sourceElement: HTMLElement, itemType: ApprovalItemType) => {
       if (itemType !== 'Orden de Publicidad') {
-        return generatePaginatedPdfFromElement(containerElement);
+        const stableCapture = await createStablePdfCaptureElement(sourceElement);
+        try {
+          return await generatePaginatedPdfFromElement(stableCapture.element);
+        } finally {
+          stableCapture.cleanup();
+        }
       }
 
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import('html2canvas'),
         import('jspdf'),
       ]);
+      const stableCapture = await createStablePdfCaptureElement(sourceElement);
+      const containerElement = stableCapture.element;
+
+      try {
       const isLandscape = itemType === 'Orden de Publicidad';
       const orientation = isLandscape ? 'l' : 'p';
       const pdfWidthMm = isLandscape ? 297 : 210;
@@ -342,6 +381,9 @@ function ApprovalsPageComponent() {
       });
 
       return pdf;
+      } finally {
+        stableCapture.cleanup();
+      }
   };
 
   // 🟢 ENCARGADO DE CONSTRUIR EL PDF Y DESPACHAR EL MAIL (REUTILIZABLE)
