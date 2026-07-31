@@ -41,6 +41,7 @@ import { ConvenioPdf } from '@/components/canjes/convenio-pdf';
 import { AdvertisingOrderPdf } from '@/components/publicidad/advertising-pdf';
 import { AdvertisingOrderViewer } from '@/components/publicidad/advertising-viewer'; // 🟢 Importamos el visor oficial
 import { ClientPdf } from '@/components/clients/client-pdf';
+import { generateClientPdfBase64FromElement } from '@/lib/client-pdf-utils';
 import { provinciasArgentina, tipoEntidadOptions, condicionIVAOptions } from '@/lib/data';
 
 type BillingType = 'SRL' | 'SAS' | 'AVION';
@@ -513,7 +514,7 @@ export default function AppCanjesMobile() {
                 ];
 
                 if (isNewClient && clientPdfRef.current) {
-                    const client64 = await generatePdfBase64(clientPdfRef.current);
+                    const client64 = await generateClientPdfBase64FromElement(clientPdfRef.current);
                     attachments.push({ filename: `Alta_${finalClientName.replace(/ /g, "_")}.pdf`, content: client64, encoding: 'base64' });
                 }
 

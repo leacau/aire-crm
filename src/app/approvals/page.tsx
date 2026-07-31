@@ -25,6 +25,7 @@ import dynamic from 'next/dynamic';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
 import { getApprovals, updateApprovalStatus } from '@/lib/api/approvals';
 import { ClientPdf } from '@/components/clients/client-pdf';
+import { generateClientPdfBase64FromElement } from '@/lib/client-pdf-utils';
 
 const AdvertisingOrderPdf = dynamic(() => import('@/components/publicidad/advertising-pdf').then(mod => mod.AdvertisingOrderPdf), { ssr: false });
 const AdvertisingRevisionHistory = dynamic(() => import('@/components/publicidad/advertising-revision-history').then(mod => mod.AdvertisingRevisionHistory), { ssr: false });
@@ -210,11 +211,7 @@ function ApprovalsPageComponent() {
   };
 
   const generateClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
-    const [{ default: html2canvas }, { default: jsPDF }, people] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
-      getPeopleByClientId(client.id),
-    ]);
+    const people = await getPeopleByClientId(client.id);
 
     setClientPdfData({ client, contact: people[0] || null });
     await waitForPdfRender();
@@ -222,50 +219,11 @@ function ApprovalsPageComponent() {
     try {
       const element = clientPdfRef.current;
       if (!element) throw new Error('No se pudo preparar el PDF de alta del cliente.');
-      await waitForImages(element);
-
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const ratio = canvas.width / canvas.height;
-      const widthInPdf = pdfWidth;
-      const heightInPdf = widthInPdf / ratio;
-      const y = heightInPdf < pdfHeight ? (pdfHeight - heightInPdf) / 2 : 0;
-
-      pdf.addImage(imgData, 'PNG', 0, y, widthInPdf, heightInPdf);
-      return pdf.output('datauristring').split(',')[1];
+      return generateClientPdfBase64FromElement(element);
     } finally {
       setClientPdfData(null);
     }
   };
-
-  const generateLegacyClientSummaryPdfBase64 = async (client: Client): Promise<string> => {
-    const { default: jsPDF } = await import('jspdf');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFillColor(240, 244, 248);
-    pdf.rect(0, 0, 210, 40, 'F');
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(18);
-    pdf.setTextColor(29, 78, 216);
-    pdf.text('ALTA DE DATOS COMERCIALES', 15, 25);
-    
-    let y = 60;
-    const addField = (label: string, value: string) => {
-      pdf.setFont('helvetica', 'bold'); pdf.text(`${label}:`, 15, y);
-      pdf.setFont('helvetica', 'normal'); pdf.text(value || '-', 65, y);
-      y += 12;
-    };
-    addField('Anunciante', client.denominacion);
-    addField('Razón Social', client.razonSocial);
-    addField('CUIT', client.cuit || '-');
-    addField('Condición de IVA', client.condicionIVA);
-    addField('ID Tango', client.idTango || 'No asignado');
-    return pdf.output('datauristring').split(',')[1];
-  };
-
   // 🟢 MOTOR AVANZADO DE GENERACIÓN DE PDF PARA LA APROBACIÓN Y RENOTIFICACIÓN
   const generateAdvancedPdf = async (containerElement: HTMLElement, itemType: ApprovalItemType) => {
       if (itemType !== 'Orden de Publicidad') {
@@ -398,16 +356,11 @@ function ApprovalsPageComponent() {
         'No se pudo consultar el cliente a tiempo.',
       );
       if (clientObj) {
-        try {
-          clientBase64 = await withTimeout(
-            generateClientSummaryPdfBase64(clientObj),
-            25000,
-            'No se pudo generar el PDF de alta del cliente a tiempo.',
-          );
-        } catch (clientPdfError) {
-          console.warn('No se pudo generar el PDF moderno de cliente, se usa respaldo legacy:', clientPdfError);
-          clientBase64 = await generateLegacyClientSummaryPdfBase64(clientObj);
-        }
+        clientBase64 = await withTimeout(
+          generateClientSummaryPdfBase64(clientObj),
+          25000,
+          'No se pudo generar el PDF de alta del cliente a tiempo.',
+        );
       }
     }
 

@@ -104,12 +104,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { ClientPdf } from './client-pdf';
 import { CommentThread } from '@/components/comments/comment-thread';
 import { NotePdf } from '@/components/notas/note-pdf';
 import { generatePaginatedPdfFromElement } from '@/lib/pdf-utils';
+import { saveClientPdfFromElement } from '@/lib/client-pdf-utils';
 import { ClientTangoInvoices } from './client-tango-invoices';
 
 const stageColors: Record<OpportunityStage, string> = {
@@ -701,27 +700,7 @@ export function ClientDetails({
     }
 
     try {
-      const canvas = await html2canvas(element, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      const ratio = imgWidth / imgHeight;
-      const widthInPdf = pdfWidth;
-      const heightInPdf = widthInPdf / ratio;
-      
-      let y = 0;
-      if (heightInPdf < pdfHeight) {
-        y = (pdfHeight - heightInPdf) / 2;
-      }
-      
-      pdf.addImage(imgData, 'PNG', 0, y, widthInPdf, heightInPdf);
-      pdf.save(`ALTA-${client.denominacion.replace(/ /g, "_")}.pdf`);
+      await saveClientPdfFromElement(element, `ALTA-${client.denominacion.replace(/ /g, "_")}.pdf`);
     } catch (error) {
       console.error("Error generating PDF", error);
       toast({ title: "Error al generar el PDF", variant: "destructive" });
