@@ -2,9 +2,9 @@
 
 ## Alcance
 
-Este repositorio contiene la aplicacion interna de Aire CRM. La rama activa de
-desarrollo es `api`; los fixes de seguridad se aplican sobre esa rama y luego
-se despliegan segun el flujo de release vigente.
+Este repositorio contiene la aplicacion. La rama activa de desarrollo es `api`;
+los fixes de seguridad se aplican sobre esa rama y luego se despliegan segun el
+flujo de release vigente.
 
 ## Reporte de vulnerabilidades
 
@@ -27,6 +27,7 @@ Git.
 ## Respuesta
 
 Los reportes se priorizan segun impacto sobre autenticacion, permisos,
-facturacion, datos comerciales o integraciones externas. Cuando corresponda,
-se preparara un fix en la rama `api` y se validara con tests, typecheck y build
+facturacion, datos comerciales o integraciones externas. Cuando corresponda, se
+preparara un fix en la rama `api` y se validara con tests, typecheck y build
 antes del despliegue.
+
